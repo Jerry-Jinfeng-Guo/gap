@@ -1,16 +1,20 @@
+#include <iostream>
+
 #include "gap/core/backend_factory.h"
 
-#include "../unit/test_main.cpp"
+#include "test_framework.h"
 
 using namespace gap;
+using namespace gap::core;
+using namespace gap::solver;
 
 void test_gpu_lu_solver_large_matrix() {
-    if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+    if (!BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
         std::cout << "GPU not available, skipping test" << std::endl;
         return;
     }
 
-    auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+    auto lu_solver = BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
 
     // Create larger sparse matrix
     SparseMatrix matrix;
@@ -60,13 +64,13 @@ void test_gpu_lu_solver_large_matrix() {
 }
 
 void test_gpu_lu_solver_memory_management() {
-    if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+    if (!BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
         std::cout << "GPU not available, skipping test" << std::endl;
         return;
     }
 
     // Test multiple factorizations to check memory management
-    auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+    auto lu_solver = BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
 
     for (int iter = 0; iter < 3; ++iter) {
         SparseMatrix matrix;
@@ -90,15 +94,4 @@ void test_gpu_lu_solver_memory_management() {
         ComplexVector solution = lu_solver->solve(rhs);
         ASSERT_EQ(5, solution.size());
     }
-}
-
-int main() {
-    TestRunner runner;
-
-    runner.add_test("GPU LU Solver Large Matrix", test_gpu_lu_solver_large_matrix);
-    runner.add_test("GPU LU Solver Memory Management", test_gpu_lu_solver_memory_management);
-
-    runner.run_all();
-
-    return runner.get_failed_count();
 }

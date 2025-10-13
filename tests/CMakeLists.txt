@@ -44,6 +44,7 @@ add_test(NAME ValidationTests COMMAND gap_validation_tests)
 # GPU tests (only if CUDA is enabled)
 if(GAP_ENABLE_CUDA)
     add_executable(gap_gpu_tests
+        unit/gpu_test_main.cpp
         unit/test_gpu_admittance.cpp
         unit/test_gpu_lu_solver.cpp
         unit/test_gpu_powerflow.cpp

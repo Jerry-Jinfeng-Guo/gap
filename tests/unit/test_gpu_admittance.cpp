@@ -1,16 +1,20 @@
+#include <iostream>
+
 #include "gap/core/backend_factory.h"
 
-#include "../unit/test_main.cpp"
+#include "test_framework.h"
 
 using namespace gap;
+using namespace gap::core;
+using namespace gap::solver;
 
 void test_gpu_admittance_functionality() {
-    if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+    if (!BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
         std::cout << "GPU not available, skipping test" << std::endl;
         return;
     }
 
-    auto admittance = core::BackendFactory::create_admittance_backend(BackendType::GPU_CUDA);
+    auto admittance = BackendFactory::create_admittance_backend(BackendType::GPU_CUDA);
     ASSERT_TRUE(admittance != nullptr);
 
     NetworkData network;
@@ -24,12 +28,12 @@ void test_gpu_admittance_functionality() {
 }
 
 void test_gpu_lu_solver_functionality() {
-    if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+    if (!BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
         std::cout << "GPU not available, skipping test" << std::endl;
         return;
     }
 
-    auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+    auto lu_solver = BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
     ASSERT_TRUE(lu_solver != nullptr);
 
     SparseMatrix matrix;
@@ -47,16 +51,16 @@ void test_gpu_lu_solver_functionality() {
 }
 
 void test_gpu_powerflow_functionality() {
-    if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+    if (!BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
         std::cout << "GPU not available, skipping test" << std::endl;
         return;
     }
 
-    auto pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
-    auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+    auto pf_solver = BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
+    auto lu_solver = BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
 
     ASSERT_TRUE(pf_solver != nullptr);
-    pf_solver->set_lu_solver(lu_solver);
+    pf_solver->set_lu_solver(std::shared_ptr<ILUSolver>(lu_solver.release()));
 
     NetworkData network;
     network.num_buses = 3;
@@ -76,16 +80,4 @@ void test_gpu_powerflow_functionality() {
 
     auto result = pf_solver->solve_power_flow(network, matrix, config);
     ASSERT_EQ(3, result.bus_voltages.size());
-}
-
-int main() {
-    TestRunner runner;
-
-    runner.add_test("GPU Admittance Functionality", test_gpu_admittance_functionality);
-    runner.add_test("GPU LU Solver Functionality", test_gpu_lu_solver_functionality);
-    runner.add_test("GPU PowerFlow Functionality", test_gpu_powerflow_functionality);
-
-    runner.run_all();
-
-    return runner.get_failed_count();
 }

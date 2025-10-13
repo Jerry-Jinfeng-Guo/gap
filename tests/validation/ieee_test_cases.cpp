@@ -20,15 +20,15 @@ void test_ieee14_bus_case() {
     network.base_mva = 100.0;
 
     // Create buses (simplified data for testing framework)
-    network.buses.push_back({1, 1.060, 0.0, 0.0, 0.0, 2});    // Slack bus
-    network.buses.push_back({2, 1.045, 0.0, 40.0, 42.4, 1});  // PV bus (generator)
-    network.buses.push_back({3, 1.010, 0.0, 0.0, 23.4, 1});   // PV bus (generator)
-    network.buses.push_back({4, 1.0, 0.0, 47.8, -3.9, 0});    // PQ bus
-    network.buses.push_back({5, 1.0, 0.0, 7.6, 1.6, 0});      // PQ bus
+    network.buses.push_back({1, 1.060, 0.0, 0.0, 0.0, BusType::SLACK});  // Slack bus
+    network.buses.push_back({2, 1.045, 0.0, 40.0, 42.4, BusType::PV});   // PV bus (generator)
+    network.buses.push_back({3, 1.010, 0.0, 0.0, 23.4, BusType::PV});    // PV bus (generator)
+    network.buses.push_back({4, 1.0, 0.0, 47.8, -3.9, BusType::PQ});     // PQ bus
+    network.buses.push_back({5, 1.0, 0.0, 7.6, 1.6, BusType::PQ});       // PQ bus
 
     // Add remaining buses (PQ type)
     for (int i = 6; i <= 14; ++i) {
-        BusData bus = {i, 1.0, 0.0, 0.0, 0.0, 0};
+        BusData bus = {i, 1.0, 0.0, 0.0, 0.0, BusType::PQ};
         if (i == 6) {
             bus.active_power = 11.2;
             bus.reactive_power = 7.5;
@@ -141,9 +141,9 @@ void test_simple_3bus_case() {
     network.base_mva = 100.0;
 
     // Create 3-bus system: 1 generator, 2 loads
-    network.buses.push_back({1, 1.05, 0.0, 0.0, 0.0, 2});    // Slack
-    network.buses.push_back({2, 1.0, 0.0, 100.0, 50.0, 0});  // Load
-    network.buses.push_back({3, 1.0, 0.0, 80.0, 40.0, 0});   // Load
+    network.buses.push_back({1, 1.05, 0.0, 0.0, 0.0, BusType::SLACK});  // Slack
+    network.buses.push_back({2, 1.0, 0.0, 100.0, 50.0, BusType::PQ});   // Load
+    network.buses.push_back({3, 1.0, 0.0, 80.0, 40.0, BusType::PQ});    // Load
 
     // Create simple Y-matrix (star configuration)
     SparseMatrix matrix;
@@ -201,11 +201,11 @@ void test_backend_comparison() {
     network.num_buses = 5;
     network.base_mva = 100.0;
 
-    network.buses.push_back({1, 1.06, 0.0, 0.0, 0.0, 2});
-    network.buses.push_back({2, 1.0, 0.0, 50.0, 30.0, 0});
-    network.buses.push_back({3, 1.0, 0.0, 60.0, 35.0, 0});
-    network.buses.push_back({4, 1.02, 0.0, -40.0, 0.0, 1});  // Generator
-    network.buses.push_back({5, 1.0, 0.0, 70.0, 40.0, 0});
+    network.buses.push_back({1, 1.06, 0.0, 0.0, 0.0, BusType::SLACK});
+    network.buses.push_back({2, 1.0, 0.0, 50.0, 30.0, BusType::PQ});
+    network.buses.push_back({3, 1.0, 0.0, 60.0, 35.0, BusType::PQ});
+    network.buses.push_back({4, 1.02, 0.0, -40.0, 0.0, BusType::PV});  // Generator
+    network.buses.push_back({5, 1.0, 0.0, 70.0, 40.0, BusType::PQ});
 
     SparseMatrix matrix;
     matrix.num_rows = 5;

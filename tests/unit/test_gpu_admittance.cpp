@@ -66,9 +66,9 @@ void test_gpu_powerflow_functionality() {
     network.num_buses = 3;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, 2};
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, 0};
-    BusData bus3 = {3, 1.0, 0.0, 80.0, 40.0, 0};
+    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, BusType::SLACK};
+    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};
+    BusData bus3 = {3, 1.0, 0.0, 80.0, 40.0, BusType::PQ};
     network.buses = {bus1, bus2, bus3};
 
     SparseMatrix matrix;

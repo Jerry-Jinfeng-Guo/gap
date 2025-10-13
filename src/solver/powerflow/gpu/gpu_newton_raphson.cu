@@ -141,9 +141,9 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         std::cout << "GPUNewtonRaphson: GPU LU solver backend set" << std::endl;
     }
 
-    std::vector<double> calculate_mismatches(const NetworkData& network_data,
-                                             const ComplexVector& bus_voltages,
-                                             const SparseMatrix& admittance_matrix) override {
+    std::vector<double> calculate_mismatches(
+        const NetworkData& network_data, [[maybe_unused]] const ComplexVector& bus_voltages,
+        [[maybe_unused]] const SparseMatrix& admittance_matrix) override {
         // TODO: Implement GPU-based mismatch calculation using CUDA kernels
         std::cout << "GPUNewtonRaphson: Calculating power mismatches on GPU" << std::endl;
 

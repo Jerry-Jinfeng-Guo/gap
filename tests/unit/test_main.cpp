@@ -90,5 +90,3 @@ class TestRunner {
                                      " (tolerance: " + std::to_string(tolerance) + ")");        \
         }                                                                                       \
     } while (0)
-}
-while (0) 

@@ -70,6 +70,8 @@ if(GAP_ENABLE_CUDA)
     set(CMAKE_CUDA_HOST_COMPILER "/usr/bin/gcc-13")
 
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_60 -use_fast_math --extended-lambda --expt-relaxed-constexpr")
+    # Suppress clang-format line directive warnings and other style warnings 
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -w")
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -G")
     else()

@@ -1,19 +1,23 @@
+#include <iostream>
+
 #include "gap/core/backend_factory.h"
 
-#include "../unit/test_main.cpp"
+#include "test_framework.h"
 
 using namespace gap;
+using namespace gap::core;
+using namespace gap::solver;
 
 void test_gpu_powerflow_convergence() {
-    if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+    if (!BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
         std::cout << "GPU not available, skipping test" << std::endl;
         return;
     }
 
-    auto pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
-    auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+    auto pf_solver = BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
+    auto lu_solver = BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
 
-    pf_solver->set_lu_solver(lu_solver);
+    pf_solver->set_lu_solver(std::shared_ptr<ILUSolver>(lu_solver.release()));
 
     // Create a small test system
     NetworkData network;
@@ -61,15 +65,15 @@ void test_gpu_powerflow_convergence() {
 }
 
 void test_gpu_powerflow_different_configs() {
-    if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+    if (!BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
         std::cout << "GPU not available, skipping test" << std::endl;
         return;
     }
 
-    auto pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
-    auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+    auto pf_solver = BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
+    auto lu_solver = BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
 
-    pf_solver->set_lu_solver(lu_solver);
+    pf_solver->set_lu_solver(std::shared_ptr<ILUSolver>(lu_solver.release()));
 
     // Simple 2-bus system
     NetworkData network;
@@ -103,15 +107,4 @@ void test_gpu_powerflow_different_configs() {
         // Stricter tolerance should require more iterations (if not converged immediately)
         // This is more of a behavioral test
     }
-}
-
-int main() {
-    TestRunner runner;
-
-    runner.add_test("GPU PowerFlow Convergence", test_gpu_powerflow_convergence);
-    runner.add_test("GPU PowerFlow Different Configs", test_gpu_powerflow_different_configs);
-
-    runner.run_all();
-
-    return runner.get_failed_count();
 }

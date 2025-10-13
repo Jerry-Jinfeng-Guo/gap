@@ -6,21 +6,7 @@ repos:
         entry: clang-format
         language: system
         files: \.(cpp|cc|cxx|c|hpp|hh|h|cu|cuh)$
-        args: [--style=file, -i]
-
-      - id: trailing-whitespace
-        name: Trim Trailing Whitespace
-        entry: bash -c 'for file in "$@"; do sed -i "s/[[:space:]]*$//" "$file"; done' --
-        language: system
-        files: \.(cpp|cc|cxx|c|hpp|hh|h|cu|cuh|txt|md|cmake|py|yml|yaml)$
-
-      - id: end-of-file-fixer
-        name: Fix End of Files
-        entry: bash -c 'for file in "$@"; do if [ -s "$file" ] && [ "$(tail -c1 "$file")" != "" ]; then echo >> "$file"; fi; done' --
-        language: system
-        files: \.(cpp|cc|cxx|c|hpp|hh|h|cu|cuh|txt|md|cmake|py|yml|yaml)$
-
-# Configuration
+        args: [--style=file, -i]# Configuration
 ci:
     autofix_commit_msg: |
         [pre-commit.ci] auto fixes from pre-commit hooks

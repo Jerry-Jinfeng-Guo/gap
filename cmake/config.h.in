@@ -1,0 +1,44 @@
+#pragma once
+
+// GAP Version Information
+#define GAP_VERSION_MAJOR @GAP_VERSION_MAJOR@
+#define GAP_VERSION_MINOR @GAP_VERSION_MINOR@
+#define GAP_VERSION_PATCH @GAP_VERSION_PATCH@
+#define GAP_VERSION_STRING "@GAP_VERSION@"
+
+// Build Configuration
+#cmakedefine01 GAP_CUDA_ENABLED
+#cmakedefine GAP_BUILD_TYPE "@CMAKE_BUILD_TYPE@"
+#cmakedefine GAP_COMPILER_ID "@CMAKE_CXX_COMPILER_ID@"
+#cmakedefine GAP_COMPILER_VERSION "@CMAKE_CXX_COMPILER_VERSION@"
+
+// Feature flags
+#cmakedefine01 GAP_ENABLE_BENCHMARKING
+#cmakedefine01 GAP_ENABLE_VERBOSE_LOGGING
+
+// System information
+#cmakedefine GAP_SYSTEM_NAME "@CMAKE_SYSTEM_NAME@"
+#cmakedefine GAP_SYSTEM_PROCESSOR "@CMAKE_SYSTEM_PROCESSOR@"
+
+namespace gap {
+    
+constexpr int VERSION_MAJOR = GAP_VERSION_MAJOR;
+constexpr int VERSION_MINOR = GAP_VERSION_MINOR;
+constexpr int VERSION_PATCH = GAP_VERSION_PATCH;
+constexpr const char* VERSION_STRING = GAP_VERSION_STRING;
+
+constexpr bool CUDA_ENABLED = 
+#if GAP_CUDA_ENABLED
+    true;
+#else
+    false;
+#endif
+
+constexpr const char* BUILD_TYPE = 
+#ifdef GAP_BUILD_TYPE
+    GAP_BUILD_TYPE;
+#else
+    "Unknown";
+#endif
+
+} // namespace gap

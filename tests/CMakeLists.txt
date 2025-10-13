@@ -48,17 +48,17 @@ if(GAP_ENABLE_CUDA)
         unit/test_gpu_lu_solver.cpp
         unit/test_gpu_powerflow.cpp
     )
-    
+
     target_include_directories(gap_gpu_tests PUBLIC
         ${CMAKE_SOURCE_DIR}/include
     )
-    
+
     target_link_libraries(gap_gpu_tests
         gap_core
         gap_admittance_gpu
         gap_lu_gpu
         gap_powerflow_gpu
     )
-    
+
     add_test(NAME GPUTests COMMAND gap_gpu_tests)
 endif()

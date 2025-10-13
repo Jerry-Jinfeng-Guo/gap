@@ -10,7 +10,7 @@
 
 ### Executables Created
 1. **gap_main**: Main power flow calculation executable
-2. **gap_unit_tests**: Unit test suite 
+2. **gap_unit_tests**: Unit test suite
 3. **gap_validation_tests**: Validation test suite
 
 ### Recent Fixes Applied
@@ -21,7 +21,7 @@
 
 ### Framework Features Working
 - ✅ Modular backend architecture (CPU/GPU)
-- ✅ Abstract interfaces with concrete implementations  
+- ✅ Abstract interfaces with concrete implementations
 - ✅ JSON I/O for network data and results
 - ✅ Command-line interface with full option support
 - ✅ Comprehensive test framework
@@ -30,7 +30,7 @@
 
 ### Next Steps for Development
 1. Implement actual power flow algorithms (Newton-Raphson method)
-2. Implement real LU decomposition algorithms  
+2. Implement real LU decomposition algorithms
 3. Add CUDA backend implementations
 4. Enhance JSON data format support
 5. Add more comprehensive validation cases

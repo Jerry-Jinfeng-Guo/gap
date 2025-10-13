@@ -68,7 +68,7 @@ endif()
 if(GAP_ENABLE_CUDA)
     # Use GCC 13 for CUDA compilation (GCC 14 is not fully supported by CUDA 12.6)
     set(CMAKE_CUDA_HOST_COMPILER "/usr/bin/gcc-13")
-    
+
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_60 -use_fast_math --extended-lambda --expt-relaxed-constexpr")
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -G")

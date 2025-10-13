@@ -23,7 +23,7 @@ GAP (GPU-Accelerated Power flow) is a modern C++20 power flow solver designed fo
 - **Main Executable**: Command-line interface with backend selection
 - **IO Module**: JSON-based data input/output (CPU-based)
 - **Admittance Matrix Preparation**: CPU and GPU backends
-- **LU Solver**: CPU and GPU sparse linear solvers  
+- **LU Solver**: CPU and GPU sparse linear solvers
 - **Newton-Raphson Power Flow Solver**: CPU and GPU implementations
 - **Test Framework**: Unit tests and IEEE validation cases
 
@@ -57,7 +57,7 @@ cd gap
 # CPU-only build
 ./build.sh --cuda OFF -c
 
-# GPU-enabled build (when CUDA available) 
+# GPU-enabled build (when CUDA available)
 ./build.sh --cuda ON -c
 ```
 
@@ -77,7 +77,7 @@ make -j$(nproc)
 ### Build Targets
 - `gap_main` - Main executable
 - `gap_*` - Individual library components
-- `gap_unit_tests` - Unit test executable  
+- `gap_unit_tests` - Unit test executable
 - `gap_validation_tests` - Validation test executable
 
 ## Usage
@@ -164,7 +164,7 @@ make test  # Note: Some tests may fail initially due to stub implementations
 ### Test Coverage
 - IO module functionality
 - Admittance matrix construction
-- LU solver correctness  
+- LU solver correctness
 - Power flow convergence
 - IEEE test cases validation
 - Backend comparison tests

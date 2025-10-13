@@ -33,25 +33,27 @@ target_link_libraries(gap_admittance_cpu
     gap_core
 )
 
-# GPU Admittance Matrix Backend
-add_library(gap_admittance_gpu SHARED
-    admittance/gpu/gpu_admittance_matrix.cu
-)
+# GPU Admittance Matrix Backend (only if CUDA is enabled)
+if(GAP_ENABLE_CUDA)
+    add_library(gap_admittance_gpu SHARED
+        admittance/gpu/gpu_admittance_matrix.cu
+    )
 
-target_include_directories(gap_admittance_gpu PUBLIC
-    ${CMAKE_SOURCE_DIR}/include
-)
+    target_include_directories(gap_admittance_gpu PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+    )
 
-target_link_libraries(gap_admittance_gpu
-    gap_core
-    CUDA::cudart
-    CUDA::cublas
-    CUDA::cusparse
-)
+    target_link_libraries(gap_admittance_gpu
+        gap_core
+        CUDA::cudart
+        CUDA::cublas
+        CUDA::cusparse
+    )
 
-set_target_properties(gap_admittance_gpu PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-)
+    set_target_properties(gap_admittance_gpu PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+endif()
 
 # CPU LU Solver Backend
 add_library(gap_lu_cpu SHARED
@@ -66,25 +68,27 @@ target_link_libraries(gap_lu_cpu
     gap_core
 )
 
-# GPU LU Solver Backend  
-add_library(gap_lu_gpu SHARED
-    solver/lu/gpu/gpu_lu_solver.cu
-)
+# GPU LU Solver Backend (only if CUDA is enabled)
+if(GAP_ENABLE_CUDA)
+    add_library(gap_lu_gpu SHARED
+        solver/lu/gpu/gpu_lu_solver.cu
+    )
 
-target_include_directories(gap_lu_gpu PUBLIC
-    ${CMAKE_SOURCE_DIR}/include
-)
+    target_include_directories(gap_lu_gpu PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+    )
 
-target_link_libraries(gap_lu_gpu
-    gap_core
-    CUDA::cudart
-    CUDA::cublas
-    CUDA::cusolver
-)
+    target_link_libraries(gap_lu_gpu
+        gap_core
+        CUDA::cudart
+        CUDA::cublas
+        CUDA::cusolver
+    )
 
-set_target_properties(gap_lu_gpu PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-)
+    set_target_properties(gap_lu_gpu PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+endif()
 
 # CPU Power Flow Solver Backend
 add_library(gap_powerflow_cpu SHARED
@@ -100,25 +104,27 @@ target_link_libraries(gap_powerflow_cpu
     gap_lu_cpu
 )
 
-# GPU Power Flow Solver Backend
-add_library(gap_powerflow_gpu SHARED
-    solver/powerflow/gpu/gpu_newton_raphson.cu
-)
+# GPU Power Flow Solver Backend (only if CUDA is enabled)
+if(GAP_ENABLE_CUDA)
+    add_library(gap_powerflow_gpu SHARED
+        solver/powerflow/gpu/gpu_newton_raphson.cu
+    )
 
-target_include_directories(gap_powerflow_gpu PUBLIC
-    ${CMAKE_SOURCE_DIR}/include
-)
+    target_include_directories(gap_powerflow_gpu PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+    )
 
-target_link_libraries(gap_powerflow_gpu
-    gap_core
-    gap_lu_gpu
-    CUDA::cudart
-    CUDA::cublas
-)
+    target_link_libraries(gap_powerflow_gpu
+        gap_core
+        gap_lu_gpu
+        CUDA::cudart
+        CUDA::cublas
+    )
 
-set_target_properties(gap_powerflow_gpu PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-)
+    set_target_properties(gap_powerflow_gpu PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+endif()
 
 # Main executable
 add_executable(gap_main

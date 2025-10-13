@@ -1,4 +1,4 @@
-#include "../unit/test_main.cpp"
+#include "test_framework.h"
 #include "gap/io/io_interface.h"
 #include "gap/core/backend_factory.h"
 #include <fstream>
@@ -64,15 +64,9 @@ void test_results_writing() {
     std::remove(output_file.c_str());
 }
 
-int main() {
-    TestRunner runner;
-    
+void register_io_tests(TestRunner& runner) {
     runner.add_test("IO Module Creation", test_io_module_creation);
     runner.add_test("JSON Validation", test_json_validation);
     runner.add_test("Network Data Reading", test_network_data_reading);
     runner.add_test("Results Writing", test_results_writing);
-    
-    runner.run_all();
-    
-    return runner.get_failed_count();
 }

@@ -87,8 +87,8 @@ public:
     
     std::vector<double> calculate_mismatches(
         const NetworkData& network_data,
-        const ComplexVector& bus_voltages,
-        const SparseMatrix& admittance_matrix
+        const ComplexVector& /*bus_voltages*/,
+        const SparseMatrix& /*admittance_matrix*/
     ) override {
         // TODO: Implement mismatch calculation
         std::cout << "CPUNewtonRaphson: Calculating power mismatches" << std::endl;

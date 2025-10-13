@@ -1,6 +1,6 @@
 # Unit tests
 add_executable(gap_unit_tests
-    unit/test_main.cpp
+    unit/unit_test_main.cpp
     unit/test_io.cpp
     unit/test_admittance.cpp
     unit/test_lu_solver.cpp

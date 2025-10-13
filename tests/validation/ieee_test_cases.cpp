@@ -1,4 +1,4 @@
-#include "../unit/test_main.cpp"
+#include "../unit/test_framework.h"
 #include "gap/core/backend_factory.h"
 #include <fstream>
 #include <cmath>
@@ -60,7 +60,7 @@ void test_ieee14_bus_case() {
     {
         auto pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::CPU);
         auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::CPU);
-        pf_solver->set_lu_solver(lu_solver);
+        pf_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(lu_solver.release()));
         
         solver::PowerFlowConfig config;
         config.tolerance = 1e-4;
@@ -91,7 +91,7 @@ void test_ieee14_bus_case() {
     if (core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
         auto pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
         auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
-        pf_solver->set_lu_solver(lu_solver);
+        pf_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(lu_solver.release()));
         
         solver::PowerFlowConfig config;
         config.tolerance = 1e-4;
@@ -137,7 +137,7 @@ void test_simple_3bus_case() {
     
     auto pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::CPU);
     auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::CPU);
-    pf_solver->set_lu_solver(lu_solver);
+    pf_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(lu_solver.release()));
     
     solver::PowerFlowConfig config;
     config.tolerance = 1e-6;
@@ -205,14 +205,14 @@ void test_backend_comparison() {
     // Test CPU
     auto cpu_pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::CPU);
     auto cpu_lu_solver = core::BackendFactory::create_lu_solver(BackendType::CPU);
-    cpu_pf_solver->set_lu_solver(cpu_lu_solver);
+    cpu_pf_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(cpu_lu_solver.release()));
     
     auto cpu_result = cpu_pf_solver->solve_power_flow(network, matrix, config);
     
     // Test GPU
     auto gpu_pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
     auto gpu_lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
-    gpu_pf_solver->set_lu_solver(gpu_lu_solver);
+    gpu_pf_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(gpu_lu_solver.release()));
     
     auto gpu_result = gpu_pf_solver->solve_power_flow(network, matrix, config);
     
@@ -235,14 +235,8 @@ void test_backend_comparison() {
               << " in " << gpu_result.iterations << " iterations" << std::endl;
 }
 
-int main() {
-    TestRunner runner;
-    
+void register_validation_tests(TestRunner& runner) {
     runner.add_test("IEEE 14-bus Test Case", test_ieee14_bus_case);
     runner.add_test("Simple 3-bus Case", test_simple_3bus_case);
     runner.add_test("Backend Comparison", test_backend_comparison);
-    
-    runner.run_all();
-    
-    return runner.get_failed_count();
 }

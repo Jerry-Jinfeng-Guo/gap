@@ -1,4 +1,4 @@
-#include "../unit/test_main.cpp"
+#include "test_framework.h"
 #include "gap/admittance/admittance_interface.h"
 #include "gap/core/backend_factory.h"
 
@@ -7,7 +7,7 @@ using namespace gap;
 void test_cpu_admittance_creation() {
     auto admittance = core::BackendFactory::create_admittance_backend(BackendType::CPU);
     ASSERT_TRUE(admittance != nullptr);
-    ASSERT_EQ(BackendType::CPU, admittance->get_backend_type());
+    ASSERT_BACKEND_EQ(BackendType::CPU, admittance->get_backend_type());
 }
 
 void test_admittance_matrix_build() {
@@ -56,22 +56,16 @@ void test_gpu_admittance_availability() {
     if (gpu_available) {
         auto admittance = core::BackendFactory::create_admittance_backend(BackendType::GPU_CUDA);
         ASSERT_TRUE(admittance != nullptr);
-        ASSERT_EQ(BackendType::GPU_CUDA, admittance->get_backend_type());
+        ASSERT_BACKEND_EQ(BackendType::GPU_CUDA, admittance->get_backend_type());
     }
     
     // Test should pass regardless of GPU availability
     ASSERT_TRUE(true);
 }
 
-int main() {
-    TestRunner runner;
-    
+void register_admittance_tests(TestRunner& runner) {
     runner.add_test("CPU Admittance Creation", test_cpu_admittance_creation);
     runner.add_test("Admittance Matrix Build", test_admittance_matrix_build);
     runner.add_test("Admittance Matrix Update", test_admittance_matrix_update);
     runner.add_test("GPU Admittance Availability", test_gpu_admittance_availability);
-    
-    runner.run_all();
-    
-    return runner.get_failed_count();
 }

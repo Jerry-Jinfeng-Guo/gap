@@ -1,8 +1,15 @@
+#pragma once
+
 #include <iostream>
 #include <cassert>
 #include <string>
 #include <functional>
 #include <vector>
+#include <cmath>
+#include <stdexcept>
+
+// Include gap types for backend_type_to_string function
+#include "gap/core/types.h"
 
 /**
  * @brief Simple test framework
@@ -88,5 +95,4 @@ public:
                                    " but got " + std::to_string(actual) + \
                                    " (tolerance: " + std::to_string(tolerance) + ")"); \
         } \
-    } while(0)
     } while(0)

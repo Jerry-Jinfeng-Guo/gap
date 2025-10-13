@@ -1,4 +1,4 @@
-#include "../unit/test_main.cpp"
+#include "test_framework.h"
 #include "gap/solver/lu_solver_interface.h"
 #include "gap/core/backend_factory.h"
 
@@ -7,7 +7,7 @@ using namespace gap;
 void test_cpu_lu_solver_creation() {
     auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::CPU);
     ASSERT_TRUE(lu_solver != nullptr);
-    ASSERT_EQ(BackendType::CPU, lu_solver->get_backend_type());
+    ASSERT_BACKEND_EQ(BackendType::CPU, lu_solver->get_backend_type());
     ASSERT_FALSE(lu_solver->is_factorized());
 }
 
@@ -80,23 +80,17 @@ void test_gpu_lu_solver_availability() {
     if (gpu_available) {
         auto lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
         ASSERT_TRUE(lu_solver != nullptr);
-        ASSERT_EQ(BackendType::GPU_CUDA, lu_solver->get_backend_type());
+        ASSERT_BACKEND_EQ(BackendType::GPU_CUDA, lu_solver->get_backend_type());
     }
     
     // Test should pass regardless of GPU availability
     ASSERT_TRUE(true);
 }
 
-int main() {
-    TestRunner runner;
-    
+void register_lu_solver_tests(TestRunner& runner) {
     runner.add_test("CPU LU Solver Creation", test_cpu_lu_solver_creation);
     runner.add_test("LU Factorization", test_lu_factorization);
     runner.add_test("LU Solve", test_lu_solve);
     runner.add_test("LU Update Factorization", test_lu_update_factorization);
     runner.add_test("GPU LU Solver Availability", test_gpu_lu_solver_availability);
-    
-    runner.run_all();
-    
-    return runner.get_failed_count();
 }

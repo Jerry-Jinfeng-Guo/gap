@@ -148,7 +148,7 @@ int run_power_flow(const AppConfig& config) {
         // Create backend instances
         auto io_module = core::BackendFactory::create_io_module();
         auto admittance_backend = core::BackendFactory::create_admittance_backend(config.backend_type);
-        auto lu_solver = core::BackendFactory::create_lu_solver(config.backend_type);
+        std::shared_ptr<solver::ILUSolver> lu_solver(core::BackendFactory::create_lu_solver(config.backend_type).release());
         auto powerflow_solver = core::BackendFactory::create_powerflow_solver(config.backend_type);
         
         // Read network data

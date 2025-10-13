@@ -41,8 +41,8 @@ target_link_libraries(gap_validation_tests
 add_test(NAME UnitTests COMMAND gap_unit_tests)
 add_test(NAME ValidationTests COMMAND gap_validation_tests)
 
-# GPU tests (if CUDA is available)
-if(CUDAToolkit_FOUND)
+# GPU tests (only if CUDA is enabled)
+if(GAP_ENABLE_CUDA)
     add_executable(gap_gpu_tests
         unit/test_gpu_admittance.cpp
         unit/test_gpu_lu_solver.cpp

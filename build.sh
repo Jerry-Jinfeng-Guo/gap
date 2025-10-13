@@ -165,6 +165,20 @@ CMAKE_ARGS=(
 )
 
 if [[ "$ENABLE_CUDA" == "ON" ]]; then
+    # Check GCC version and use GCC 13 if current version is too new for CUDA
+    GCC_VERSION=$(gcc -dumpversion | cut -d. -f1)
+    if [[ "$GCC_VERSION" -gt 13 ]]; then
+        if command -v gcc-13 &> /dev/null; then
+            print_warning "GCC version $GCC_VERSION is too new for CUDA. Using gcc-13 for CUDA compilation."
+            CMAKE_ARGS+=(-DCMAKE_C_COMPILER=gcc-13)
+            CMAKE_ARGS+=(-DCMAKE_CXX_COMPILER=g++-13)
+            CMAKE_ARGS+=(-DCMAKE_CUDA_HOST_COMPILER=g++-13)
+        else
+            print_warning "GCC version $GCC_VERSION detected but gcc-13 not found. Adding -allow-unsupported-compiler flag for CUDA."
+            CMAKE_ARGS+=(-DCMAKE_CUDA_FLAGS="-allow-unsupported-compiler")
+        fi
+    fi
+    
     CMAKE_ARGS+=(-DCMAKE_CUDA_COMPILER=nvcc)
     if [[ -n "$CUDA_ARCH" ]]; then
         CMAKE_ARGS+=(-DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCH")
@@ -179,10 +193,6 @@ print_status "Build type: $BUILD_TYPE"
 print_status "CUDA support: $ENABLE_CUDA"
 if [[ -n "$CUDA_ARCH" ]]; then
     print_status "CUDA architecture: $CUDA_ARCH"
-fi
-
-if [[ "$VERBOSE" == true ]]; then
-    CMAKE_ARGS+=(--verbose)
 fi
 
 cmake .. "${CMAKE_ARGS[@]}"

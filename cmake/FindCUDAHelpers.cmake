@@ -45,7 +45,7 @@ macro(cuda_add_compile_options target)
             CUDA_STANDARD_REQUIRED ON
             CUDA_EXTENSIONS OFF
         )
-        
+
         target_compile_options(${target} PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall,-Wextra>
             $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>

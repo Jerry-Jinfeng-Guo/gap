@@ -11,6 +11,13 @@
 
 namespace gap::solver {
 
+// Functor for voltage updates in GPU kernels
+struct VoltageUpdateFunctor {
+    __device__ Complex operator()(const Complex& v) const {
+        return v + Complex(0.001, 0.0);
+    }
+};
+
 class GPUNewtonRaphson : public IPowerFlowSolver {
 private:
     std::shared_ptr<ILUSolver> lu_solver_;
@@ -115,9 +122,7 @@ public:
             // Placeholder: simple update on GPU using Thrust
             thrust::transform(d_bus_voltages.begin(), d_bus_voltages.end(),
                              d_bus_voltages.begin(),
-                             [] __device__ (const Complex& v) {
-                                 return v + Complex(0.001, 0.0);
-                             });
+                             VoltageUpdateFunctor());
             
             cudaDeviceSynchronize();
         }

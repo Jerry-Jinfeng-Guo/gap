@@ -34,8 +34,8 @@ void test_mismatch_calculation() {
     network.num_buses = 2;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, 2};     // Slack bus
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, 0};  // PQ bus
+    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, BusType::SLACK};  // Slack bus
+    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};  // PQ bus
     network.buses = {bus1, bus2};
 
     // Create dummy admittance matrix
@@ -61,8 +61,8 @@ void test_powerflow_solve_simple() {
     network.num_buses = 2;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, 2};   // Slack bus
-    BusData bus2 = {2, 1.0, 0.0, 50.0, 30.0, 0};  // PQ bus
+    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, BusType::SLACK};  // Slack bus
+    BusData bus2 = {2, 1.0, 0.0, 50.0, 30.0, BusType::PQ};    // PQ bus
     network.buses = {bus1, bus2};
 
     // Create dummy admittance matrix

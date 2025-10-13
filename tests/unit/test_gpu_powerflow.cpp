@@ -25,10 +25,10 @@ void test_gpu_powerflow_convergence() {
     network.base_mva = 100.0;
 
     // Create buses: 1 slack, 2 PQ, 1 PV
-    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, 2};    // Slack
-    BusData bus2 = {2, 1.0, 0.0, 120.0, 80.0, 0};  // PQ
-    BusData bus3 = {3, 1.0, 0.0, 100.0, 60.0, 0};  // PQ
-    BusData bus4 = {4, 1.02, 0.0, -80.0, 0.0, 1};  // PV (generator)
+    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, BusType::SLACK};  // Slack
+    BusData bus2 = {2, 1.0, 0.0, 120.0, 80.0, BusType::PQ};   // PQ
+    BusData bus3 = {3, 1.0, 0.0, 100.0, 60.0, BusType::PQ};   // PQ
+    BusData bus4 = {4, 1.02, 0.0, -80.0, 0.0, BusType::PV};   // PV (generator)
 
     network.buses = {bus1, bus2, bus3, bus4};
 
@@ -80,8 +80,8 @@ void test_gpu_powerflow_different_configs() {
     network.num_buses = 2;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, 2};
-    BusData bus2 = {2, 1.0, 0.0, 50.0, 30.0, 0};
+    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, BusType::SLACK};
+    BusData bus2 = {2, 1.0, 0.0, 50.0, 30.0, BusType::PQ};
     network.buses = {bus1, bus2};
 
     SparseMatrix matrix;

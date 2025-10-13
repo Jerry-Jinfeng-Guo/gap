@@ -20,9 +20,9 @@ void test_admittance_matrix_build() {
     network.num_branches = 2;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, 2};     // Slack bus
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, 0};  // PQ bus
-    BusData bus3 = {3, 1.0, 0.0, 150.0, 0.0, 1};   // PV bus
+    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, BusType::SLACK};  // Slack bus
+    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};  // PQ bus
+    BusData bus3 = {3, 1.0, 0.0, 150.0, 0.0, BusType::PV};   // PV bus
 
     network.buses = {bus1, bus2, bus3};
 

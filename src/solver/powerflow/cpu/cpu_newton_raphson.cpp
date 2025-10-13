@@ -27,7 +27,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         if (config.use_flat_start) {
             std::cout << "  Using flat start initialization" << std::endl;
             for (size_t i = 0; i < network_data.buses.size(); ++i) {
-                if (network_data.buses[i].bus_type == 2) {  // Slack bus
+                if (network_data.buses[i].bus_type == BusType::SLACK) {  // Slack bus
                     result.bus_voltages[i] = Complex(network_data.buses[i].voltage_magnitude, 0.0);
                 } else {
                     result.bus_voltages[i] = Complex(1.0, 0.0);  // Flat start
@@ -104,10 +104,10 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
 
         // For now, return dummy mismatches
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
-            if (network_data.buses[i].bus_type != 2) {      // Not slack bus
-                mismatches.push_back(0.1);                  // Dummy P mismatch
-                if (network_data.buses[i].bus_type == 0) {  // PQ bus
-                    mismatches.push_back(0.05);             // Dummy Q mismatch
+            if (network_data.buses[i].bus_type != BusType::SLACK) {   // Not slack bus
+                mismatches.push_back(0.1);                            // Dummy P mismatch
+                if (network_data.buses[i].bus_type == BusType::PQ) {  // PQ bus
+                    mismatches.push_back(0.05);                       // Dummy Q mismatch
                 }
             }
         }

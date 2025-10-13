@@ -50,17 +50,26 @@ GAP (GPU-Accelerated Power flow) is a modern C++20 power flow solver designed fo
 ```bash
 git clone <repository-url>
 cd gap
-mkdir build && cd build
 ```
 
-### CPU-Only Build
+### Recommended Build Method (using build script)
 ```bash
+# CPU-only build
+./build.sh --cuda OFF -c
+
+# GPU-enabled build (when CUDA available) 
+./build.sh --cuda ON -c
+```
+
+### Manual Build Method
+```bash
+mkdir build && cd build
+
+# CPU-only build
 cmake ..
 make -j$(nproc)
-```
 
-### GPU-Enabled Build
-```bash
+# GPU-enabled build
 cmake .. -DCMAKE_CUDA_ARCHITECTURES=70  # Adjust for your GPU
 make -j$(nproc)
 ```
@@ -68,25 +77,24 @@ make -j$(nproc)
 ### Build Targets
 - `gap_main` - Main executable
 - `gap_*` - Individual library components
-- `gap_unit_tests` - Unit test executable
+- `gap_unit_tests` - Unit test executable  
 - `gap_validation_tests` - Validation test executable
-- `gap_gpu_tests` - GPU-specific tests (if CUDA available)
 
 ## Usage
 
 ### Basic Power Flow Calculation
 ```bash
-# CPU backend
-./bin/gap_main -i network.json -o results.json
+# CPU backend (from project root)
+./build/bin/gap_main -i data/sample/simple_3bus.json -o results.json
 
 # GPU backend (if available)
-./bin/gap_main -i network.json -o results.json -b gpu
+./build/bin/gap_main -i data/sample/simple_3bus.json -o results.json -b gpu
 
 # With verbose output
-./bin/gap_main -i network.json -o results.json -v
+./build/bin/gap_main -i data/sample/simple_3bus.json -o results.json -v
 
 # Custom solver settings
-./bin/gap_main -i network.json -o results.json -t 1e-8 -m 100
+./build/bin/gap_main -i data/sample/simple_3bus.json -o results.json -t 1e-8 -m 100
 ```
 
 ### Command Line Options
@@ -140,24 +148,28 @@ Power system data should be provided in JSON format:
 
 ### Run Unit Tests
 ```bash
-# All unit tests
-make test
+# Individual test suites (recommended)
+./build/bin/gap_unit_tests
+./build/bin/gap_validation_tests
 
-# Individual test suites
+# Or from build directory
+cd build
 ./bin/gap_unit_tests
 ./bin/gap_validation_tests
 
-# GPU tests (if available)
-./bin/gap_gpu_tests
+# CTest integration (may show failures from stub implementations)
+make test  # Note: Some tests may fail initially due to stub implementations
 ```
 
 ### Test Coverage
 - IO module functionality
 - Admittance matrix construction
-- LU solver correctness
+- LU solver correctness  
 - Power flow convergence
 - IEEE test cases validation
 - Backend comparison tests
+
+**Note**: Some tests may initially fail or show non-convergence due to stub implementations. This is expected behavior until the full algorithms are implemented.
 
 ## Development
 

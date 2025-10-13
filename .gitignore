@@ -1,0 +1,81 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+
+# Generated files
+*.o
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.exe
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+!cmake/*.cmake
+
+# IDE files
+.vscode/
+.idea/
+*.vcxproj*
+*.sln
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Output files
+results*.json
+output*.json
+*.out
+
+# Debug files
+core
+*.dmp
+*.pdb
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# CUDA
+*.cubin
+*.fatbin
+*.ptx
+
+# Package files
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+
+# Test results
+Testing/
+test_results/
+
+# Documentation generated files
+docs/html/
+docs/latex/
+*.pdf
+
+# Backup files
+*.bak
+*.backup
+*~

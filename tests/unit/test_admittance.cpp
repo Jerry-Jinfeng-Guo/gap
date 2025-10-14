@@ -22,9 +22,24 @@ void test_admittance_matrix_build() {
     network.num_branches = 2;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, BusType::SLACK};  // Slack bus
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};  // PQ bus
-    BusData bus3 = {3, 1.0, 0.0, 150.0, 0.0, BusType::PV};   // PV bus
+    BusData bus1 = {.id = 1,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0,
+                    .bus_type = BusType::SLACK};  // Slack bus
+    BusData bus2 = {.id = 2,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 100.0,
+                    .reactive_power = 50.0,
+                    .bus_type = BusType::PQ};  // PQ bus
+    BusData bus3 = {.id = 3,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 150.0,
+                    .reactive_power = 0.0,
+                    .bus_type = BusType::PV};  // PV bus
 
     network.buses = {bus1, bus2, bus3};
 
@@ -45,7 +60,12 @@ void test_admittance_matrix_update() {
     auto matrix = admittance->build_admittance_matrix(network);
 
     // Create branch changes
-    std::vector<BranchData> changes = {{1, 2, Complex(0.01, 0.1), Complex(0.0, 0.0), 0.0, false}};
+    std::vector<BranchData> changes = {{.from_bus = 1,
+                                        .to_bus = 2,
+                                        .impedance = Complex(0.01, 0.1),
+                                        .admittance = Complex(0.0, 0.0),
+                                        .susceptance = 0.0,
+                                        .status = false}};
 
     auto updated_matrix = admittance->update_admittance_matrix(*matrix, changes);
     ASSERT_TRUE(updated_matrix != nullptr);
@@ -60,12 +80,27 @@ void test_admittance_matrix_branch_iteration() {
     network.num_branches = 1;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, BusType::SLACK};
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};
+    BusData bus1 = {.id = 1,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0,
+                    .bus_type = BusType::SLACK};
+    BusData bus2 = {.id = 2,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 100.0,
+                    .reactive_power = 50.0,
+                    .bus_type = BusType::PQ};
     network.buses = {bus1, bus2};
 
     // Branch with impedance (0.02 + j0.06) and susceptance 0.05
-    BranchData branch = {1, 2, Complex(0.02, 0.06), Complex(0.0, 0.0), 0.05, true};
+    BranchData branch = {.from_bus = 1,
+                         .to_bus = 2,
+                         .impedance = Complex(0.02, 0.06),
+                         .admittance = Complex(0.0, 0.0),
+                         .susceptance = 0.05,
+                         .status = true};
     network.branches = {branch};
 
     auto matrix = admittance->build_admittance_matrix(network);
@@ -98,13 +133,38 @@ void test_admittance_matrix_three_bus_system() {
     network.num_branches = 2;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, BusType::SLACK};
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};
-    BusData bus3 = {3, 1.0, 0.0, 150.0, 0.0, BusType::PV};
+    BusData bus1 = {.id = 1,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0,
+                    .bus_type = BusType::SLACK};
+    BusData bus2 = {.id = 2,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 100.0,
+                    .reactive_power = 50.0,
+                    .bus_type = BusType::PQ};
+    BusData bus3 = {.id = 3,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 150.0,
+                    .reactive_power = 0.0,
+                    .bus_type = BusType::PV};
     network.buses = {bus1, bus2, bus3};
 
-    BranchData branch1 = {1, 2, Complex(0.01, 0.03), Complex(0.0, 0.0), 0.02, true};
-    BranchData branch2 = {2, 3, Complex(0.02, 0.04), Complex(0.0, 0.0), 0.03, true};
+    BranchData branch1 = {.from_bus = 1,
+                          .to_bus = 2,
+                          .impedance = Complex(0.01, 0.03),
+                          .admittance = Complex(0.0, 0.0),
+                          .susceptance = 0.02,
+                          .status = true};
+    BranchData branch2 = {.from_bus = 2,
+                          .to_bus = 3,
+                          .impedance = Complex(0.02, 0.04),
+                          .admittance = Complex(0.0, 0.0),
+                          .susceptance = 0.03,
+                          .status = true};
     network.branches = {branch1, branch2};
 
     auto matrix = admittance->build_admittance_matrix(network);
@@ -131,12 +191,27 @@ void test_admittance_matrix_out_of_service_branch() {
     network.num_branches = 1;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, BusType::SLACK};
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};
+    BusData bus1 = {.id = 1,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0,
+                    .bus_type = BusType::SLACK};
+    BusData bus2 = {.id = 2,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 100.0,
+                    .reactive_power = 50.0,
+                    .bus_type = BusType::PQ};
     network.buses = {bus1, bus2};
 
     // Out-of-service branch (status = false)
-    BranchData branch = {1, 2, Complex(0.02, 0.06), Complex(0.0, 0.0), 0.05, false};
+    BranchData branch = {.from_bus = 1,
+                         .to_bus = 2,
+                         .impedance = Complex(0.02, 0.06),
+                         .admittance = Complex(0.0, 0.0),
+                         .susceptance = 0.05,
+                         .status = false};
     network.branches = {branch};
 
     auto matrix = admittance->build_admittance_matrix(network);
@@ -162,11 +237,26 @@ void test_admittance_matrix_update_branch_status() {
     network.num_branches = 1;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, BusType::SLACK};
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};
+    BusData bus1 = {.id = 1,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0,
+                    .bus_type = BusType::SLACK};
+    BusData bus2 = {.id = 2,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 100.0,
+                    .reactive_power = 50.0,
+                    .bus_type = BusType::PQ};
     network.buses = {bus1, bus2};
 
-    BranchData branch = {1, 2, Complex(0.02, 0.06), Complex(0.0, 0.0), 0.05, true};
+    BranchData branch = {.from_bus = 1,
+                         .to_bus = 2,
+                         .impedance = Complex(0.02, 0.06),
+                         .admittance = Complex(0.0, 0.0),
+                         .susceptance = 0.05,
+                         .status = true};
     network.branches = {branch};
 
     auto original_matrix = admittance->build_admittance_matrix(network);
@@ -177,7 +267,12 @@ void test_admittance_matrix_update_branch_status() {
     // Complex original_off_diag = original_matrix->values[2];  // Assuming off-diagonal at index 2
 
     // Create branch change: take the branch out of service
-    std::vector<BranchData> changes = {{1, 2, Complex(0.02, 0.06), Complex(0.0, 0.0), 0.05, false}};
+    std::vector<BranchData> changes = {{.from_bus = 1,
+                                        .to_bus = 2,
+                                        .impedance = Complex(0.02, 0.06),
+                                        .admittance = Complex(0.0, 0.0),
+                                        .susceptance = 0.05,
+                                        .status = false}};
 
     auto updated_matrix = admittance->update_admittance_matrix(*original_matrix, changes);
 
@@ -199,15 +294,45 @@ void test_admittance_matrix_multiple_branches() {
     network.num_branches = 3;
     network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, BusType::SLACK};
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};
-    BusData bus3 = {3, 1.0, 0.0, 150.0, 0.0, BusType::PV};
+    BusData bus1 = {.id = 1,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0,
+                    .bus_type = BusType::SLACK};
+    BusData bus2 = {.id = 2,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 100.0,
+                    .reactive_power = 50.0,
+                    .bus_type = BusType::PQ};
+    BusData bus3 = {.id = 3,
+                    .voltage_magnitude = 1.0,
+                    .voltage_angle = 0.0,
+                    .active_power = 150.0,
+                    .reactive_power = 0.0,
+                    .bus_type = BusType::PV};
     network.buses = {bus1, bus2, bus3};
 
     // Create a star configuration: bus 1 connected to both bus 2 and bus 3
-    BranchData branch1 = {1, 2, Complex(0.01, 0.03), Complex(0.0, 0.0), 0.02, true};
-    BranchData branch2 = {1, 3, Complex(0.015, 0.04), Complex(0.0, 0.0), 0.025, true};
-    BranchData branch3 = {2, 3, Complex(0.02, 0.05), Complex(0.0, 0.0), 0.03, true};
+    BranchData branch1 = {.from_bus = 1,
+                          .to_bus = 2,
+                          .impedance = Complex(0.01, 0.03),
+                          .admittance = Complex(0.0, 0.0),
+                          .susceptance = 0.02,
+                          .status = true};
+    BranchData branch2 = {.from_bus = 1,
+                          .to_bus = 3,
+                          .impedance = Complex(0.015, 0.04),
+                          .admittance = Complex(0.0, 0.0),
+                          .susceptance = 0.025,
+                          .status = true};
+    BranchData branch3 = {.from_bus = 2,
+                          .to_bus = 3,
+                          .impedance = Complex(0.02, 0.05),
+                          .admittance = Complex(0.0, 0.0),
+                          .susceptance = 0.03,
+                          .status = true};
     network.branches = {branch1, branch2, branch3};
 
     auto matrix = admittance->build_admittance_matrix(network);

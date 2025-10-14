@@ -1,6 +1,6 @@
-#include "gap/core/backend_factory.h"
+#include <iostream>
 
-#include "../unit/test_main.cpp"
+#include "gap/core/backend_factory.h"
 
 using namespace gap;
 using namespace gap::core;

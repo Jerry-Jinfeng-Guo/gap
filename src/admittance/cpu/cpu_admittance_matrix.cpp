@@ -24,6 +24,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         std::vector<std::vector<std::pair<int, Complex>>> off_diagonal_elements(
             network_data.num_buses);
 
+        constexpr Complex one_comp{1.0, 0.0};
         // Iterate over all branches to build admittance matrix
         for (const auto& branch : network_data.branches) {
             if (!branch.status) {
@@ -34,7 +35,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
             int to_bus = branch.to_bus - 1;      // Convert to 0-based indexing
 
             // Calculate branch admittance (Y = 1/Z)
-            Complex branch_admittance = Complex(1.0, 0.0) / branch.impedance;
+            Complex branch_admittance = one_comp / branch.impedance;
 
             // Add to diagonal elements (self-admittance)
             diagonal_elements[from_bus] +=

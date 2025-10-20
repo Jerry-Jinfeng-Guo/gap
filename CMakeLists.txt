@@ -63,8 +63,11 @@ if(GAP_ENABLE_CUDA)
     # CUDA compiler flags for compatibility and warning reduction
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -allow-unsupported-compiler")
     
-    # Reduce nvlink warnings by preferring shared libraries
+    # Reduce nvlink warnings by preferring shared libraries and suppressing warnings
     set(CMAKE_CUDA_DEVICE_LINK_FLAGS "-Wno-deprecated-gpu-targets")
+    
+    # Suppress nvlink warnings about incompatible static libraries
+    set(CMAKE_CUDA_DEVICE_LINK_FLAGS "${CMAKE_CUDA_DEVICE_LINK_FLAGS} --suppress-link-warnings")
     
     # CMake will automatically handle host compiler setting via CMAKE_CUDA_HOST_COMPILER
     

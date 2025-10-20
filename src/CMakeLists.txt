@@ -59,6 +59,7 @@ if(GAP_ENABLE_CUDA)
 
     set_target_properties(gap_admittance_gpu PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
     )
 endif()
 
@@ -94,6 +95,7 @@ if(GAP_ENABLE_CUDA)
 
     set_target_properties(gap_lu_gpu PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
     )
 endif()
 
@@ -130,6 +132,7 @@ if(GAP_ENABLE_CUDA)
 
     set_target_properties(gap_powerflow_gpu PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
     )
 endif()
 

@@ -7,6 +7,13 @@ target_include_directories(gap_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include
 )
 
+# Link CUDA libraries to gap_core if CUDA is enabled
+if(GAP_ENABLE_CUDA)
+    target_link_libraries(gap_core
+        CUDA::cudart
+    )
+endif()
+
 # IO Module
 add_library(gap_io SHARED
     io/json_io.cpp

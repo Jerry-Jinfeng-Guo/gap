@@ -59,6 +59,13 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # Find CUDA packages only if enabled
 if(GAP_ENABLE_CUDA)
     find_package(CUDAToolkit REQUIRED)
+    
+    # CUDA compiler flags for compatibility
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -allow-unsupported-compiler")
+    
+    # Define macro to enable CUDA availability check in runtime
+    add_compile_definitions(GAP_CUDA_AVAILABLE=1)
+    message(STATUS "CUDA enabled - GAP_CUDA_AVAILABLE defined")
 endif()
 
 # Include directories

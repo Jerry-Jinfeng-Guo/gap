@@ -60,8 +60,13 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 if(GAP_ENABLE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     
-    # CUDA compiler flags for compatibility
+    # CUDA compiler flags for compatibility and warning reduction
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -allow-unsupported-compiler")
+    
+    # Reduce nvlink warnings by preferring shared libraries
+    set(CMAKE_CUDA_DEVICE_LINK_FLAGS "-Wno-deprecated-gpu-targets")
+    
+    # CMake will automatically handle host compiler setting via CMAKE_CUDA_HOST_COMPILER
     
     # Define macro to enable CUDA availability check in runtime
     add_compile_definitions(GAP_CUDA_AVAILABLE=1)
@@ -86,9 +91,6 @@ endif()
 
 # CUDA-specific options (only if CUDA is enabled)
 if(GAP_ENABLE_CUDA)
-    # Use GCC 13 for CUDA compilation (GCC 14 is not fully supported by CUDA 12.6)
-    set(CMAKE_CUDA_HOST_COMPILER "/usr/bin/gcc-13")
-
     # Set CUDA architecture - auto-detect or use compatible defaults
     if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
         # Try to detect GPU compute capability, fallback to common architectures

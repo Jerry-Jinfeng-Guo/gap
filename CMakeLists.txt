@@ -9,11 +9,24 @@ if(CMAKE_DISABLE_FIND_PACKAGE_CUDAToolkit)
     set(GAP_ENABLE_CUDA OFF)
 else()
     # Try to enable CUDA, fallback to C++ only if not available
+    
+    # Set CUDA compiler from environment if available
+    if(DEFINED ENV{CUDACXX} AND NOT DEFINED CMAKE_CUDA_COMPILER)
+        set(CMAKE_CUDA_COMPILER $ENV{CUDACXX})
+        message(STATUS "Using CUDA compiler from environment: ${CMAKE_CUDA_COMPILER}")
+    endif()
+    
+    # Debug: Show what we're working with
+    message(STATUS "Environment CUDACXX: $ENV{CUDACXX}")
+    message(STATUS "Environment CUDA_HOME: $ENV{CUDA_HOME}")
+    message(STATUS "CMAKE_CUDA_COMPILER: ${CMAKE_CUDA_COMPILER}")
+    
     include(CheckLanguage)
     check_language(CUDA)
     if(CMAKE_CUDA_COMPILER)
         project(GAP VERSION 1.0.0 LANGUAGES C CXX CUDA)
         set(GAP_ENABLE_CUDA ON)
+        message(STATUS "CUDA enabled - Found CUDA compiler: ${CMAKE_CUDA_COMPILER}")
     else()
         project(GAP VERSION 1.0.0 LANGUAGES C CXX)
         set(GAP_ENABLE_CUDA OFF)
@@ -69,7 +82,14 @@ if(GAP_ENABLE_CUDA)
     # Use GCC 13 for CUDA compilation (GCC 14 is not fully supported by CUDA 12.6)
     set(CMAKE_CUDA_HOST_COMPILER "/usr/bin/gcc-13")
 
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_60 -use_fast_math --extended-lambda --expt-relaxed-constexpr")
+    # Set CUDA architecture - auto-detect or use compatible defaults
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+        # Try to detect GPU compute capability, fallback to common architectures
+        set(CMAKE_CUDA_ARCHITECTURES "50;52;60;61;70;75;80;86;89;90")
+        message(STATUS "Using multiple CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+    endif()
+
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -use_fast_math --extended-lambda --expt-relaxed-constexpr")
     # Suppress clang-format line directive warnings and other style warnings 
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -w")
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")

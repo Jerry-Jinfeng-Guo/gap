@@ -20,26 +20,34 @@ void test_admittance_matrix_build() {
     NetworkData network;
     network.num_buses = 3;
     network.num_branches = 2;
-    network.base_mva = 100.0;
 
     BusData bus1 = {.id = 1,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
+                    .energized = 1,
+                    .u_rated = 230000.0,  // 230 kV nominal voltage
+                    .bus_type = BusType::SLACK,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
                     .active_power = 0.0,
-                    .reactive_power = 0.0,
-                    .bus_type = BusType::SLACK};  // Slack bus
+                    .reactive_power = 0.0};  // Slack bus
     BusData bus2 = {.id = 2,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
-                    .active_power = 100.0,
-                    .reactive_power = 50.0,
-                    .bus_type = BusType::PQ};  // PQ bus
+                    .energized = 1,
+                    .u_rated = 230000.0,  // 230 kV nominal voltage
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 100e6,    // 100 MW in watts
+                    .reactive_power = 50e6};  // 50 MVAr in VAr
     BusData bus3 = {.id = 3,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
-                    .active_power = 150.0,
-                    .reactive_power = 0.0,
-                    .bus_type = BusType::PV};  // PV bus
+                    .energized = 1,
+                    .u_rated = 230000.0,  // 230 kV nominal voltage
+                    .bus_type = BusType::PV,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 150e6,   // 150 MW in watts
+                    .reactive_power = 0.0};  // PV bus
 
     network.buses = {bus1, bus2, bus3};
 
@@ -60,12 +68,19 @@ void test_admittance_matrix_update() {
     auto matrix = admittance->build_admittance_matrix(network);
 
     // Create branch changes
-    std::vector<BranchData> changes = {{.from_bus = 1,
+    std::vector<BranchData> changes = {{.id = 1,
+                                        .from_bus = 1,
+                                        .from_status = 1,
                                         .to_bus = 2,
-                                        .impedance = Complex(0.01, 0.1),
-                                        .admittance = Complex(0.0, 0.0),
-                                        .susceptance = 0.0,
-                                        .status = false}};
+                                        .to_status = 1,
+                                        .status = 0,    // Out of service
+                                        .r1 = 0.01,     // resistance (ohm)
+                                        .x1 = 0.1,      // reactance (ohm)
+                                        .g1 = 0.0,      // conductance (siemens)
+                                        .b1 = 0.0,      // susceptance (siemens)
+                                        .k = 1.0,       // tap ratio
+                                        .theta = 0.0,   // phase shift
+                                        .sn = 100e6}};  // 100 MVA rating
 
     auto updated_matrix = admittance->update_admittance_matrix(*matrix, changes);
     ASSERT_TRUE(updated_matrix != nullptr);
@@ -78,29 +93,41 @@ void test_admittance_matrix_branch_iteration() {
     NetworkData network;
     network.num_buses = 2;
     network.num_branches = 1;
-    network.base_mva = 100.0;
 
     BusData bus1 = {.id = 1,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::SLACK,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
                     .active_power = 0.0,
-                    .reactive_power = 0.0,
-                    .bus_type = BusType::SLACK};
+                    .reactive_power = 0.0};
     BusData bus2 = {.id = 2,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
-                    .active_power = 100.0,
-                    .reactive_power = 50.0,
-                    .bus_type = BusType::PQ};
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 100e6,    // 100 MW
+                    .reactive_power = 50e6};  // 50 MVAr
     network.buses = {bus1, bus2};
 
-    // Branch with impedance (0.02 + j0.06) and susceptance 0.05
-    BranchData branch = {.from_bus = 1,
+    // Branch with r1=0.02 ohm, x1=0.06 ohm, and b1=0.05 siemens
+    BranchData branch = {.id = 1,
+                         .from_bus = 1,
+                         .from_status = 1,
                          .to_bus = 2,
-                         .impedance = Complex(0.02, 0.06),
-                         .admittance = Complex(0.0, 0.0),
-                         .susceptance = 0.05,
-                         .status = true};
+                         .to_status = 1,
+                         .status = 1,   // In service
+                         .r1 = 0.02,    // resistance (ohm)
+                         .x1 = 0.06,    // reactance (ohm)
+                         .g1 = 0.0,     // conductance (siemens)
+                         .b1 = 0.05,    // susceptance (siemens)
+                         .k = 1.0,      // tap ratio
+                         .theta = 0.0,  // phase shift
+                         .sn = 100e6};  // 100 MVA rating
     network.branches = {branch};
 
     auto matrix = admittance->build_admittance_matrix(network);
@@ -131,40 +158,62 @@ void test_admittance_matrix_three_bus_system() {
     NetworkData network;
     network.num_buses = 3;
     network.num_branches = 2;
-    network.base_mva = 100.0;
 
     BusData bus1 = {.id = 1,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::SLACK,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
                     .active_power = 0.0,
-                    .reactive_power = 0.0,
-                    .bus_type = BusType::SLACK};
+                    .reactive_power = 0.0};
     BusData bus2 = {.id = 2,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
-                    .active_power = 100.0,
-                    .reactive_power = 50.0,
-                    .bus_type = BusType::PQ};
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 100e6,    // 100 MW
+                    .reactive_power = 50e6};  // 50 MVAr
     BusData bus3 = {.id = 3,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
-                    .active_power = 150.0,
-                    .reactive_power = 0.0,
-                    .bus_type = BusType::PV};
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PV,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 150e6,  // 150 MW
+                    .reactive_power = 0.0};
     network.buses = {bus1, bus2, bus3};
 
-    BranchData branch1 = {.from_bus = 1,
+    BranchData branch1 = {.id = 1,
+                          .from_bus = 1,
+                          .from_status = 1,
                           .to_bus = 2,
-                          .impedance = Complex(0.01, 0.03),
-                          .admittance = Complex(0.0, 0.0),
-                          .susceptance = 0.02,
-                          .status = true};
-    BranchData branch2 = {.from_bus = 2,
+                          .to_status = 1,
+                          .status = 1,
+                          .r1 = 0.01,    // resistance (ohm)
+                          .x1 = 0.03,    // reactance (ohm)
+                          .g1 = 0.0,     // conductance (siemens)
+                          .b1 = 0.02,    // susceptance (siemens)
+                          .k = 1.0,      // tap ratio
+                          .theta = 0.0,  // phase shift
+                          .sn = 100e6};  // 100 MVA rating
+    BranchData branch2 = {.id = 2,
+                          .from_bus = 2,
+                          .from_status = 1,
                           .to_bus = 3,
-                          .impedance = Complex(0.02, 0.04),
-                          .admittance = Complex(0.0, 0.0),
-                          .susceptance = 0.03,
-                          .status = true};
+                          .to_status = 1,
+                          .status = 1,
+                          .r1 = 0.02,    // resistance (ohm)
+                          .x1 = 0.04,    // reactance (ohm)
+                          .g1 = 0.0,     // conductance (siemens)
+                          .b1 = 0.03,    // susceptance (siemens)
+                          .k = 1.0,      // tap ratio
+                          .theta = 0.0,  // phase shift
+                          .sn = 100e6};  // 100 MVA rating
     network.branches = {branch1, branch2};
 
     auto matrix = admittance->build_admittance_matrix(network);
@@ -189,29 +238,41 @@ void test_admittance_matrix_out_of_service_branch() {
     NetworkData network;
     network.num_buses = 2;
     network.num_branches = 1;
-    network.base_mva = 100.0;
 
     BusData bus1 = {.id = 1,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::SLACK,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
                     .active_power = 0.0,
-                    .reactive_power = 0.0,
-                    .bus_type = BusType::SLACK};
+                    .reactive_power = 0.0};
     BusData bus2 = {.id = 2,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
-                    .active_power = 100.0,
-                    .reactive_power = 50.0,
-                    .bus_type = BusType::PQ};
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 100e6,    // 100 MW
+                    .reactive_power = 50e6};  // 50 MVAr
     network.buses = {bus1, bus2};
 
     // Out-of-service branch (status = false)
-    BranchData branch = {.from_bus = 1,
+    BranchData branch = {.id = 1,
+                         .from_bus = 1,
+                         .from_status = 1,
                          .to_bus = 2,
-                         .impedance = Complex(0.02, 0.06),
-                         .admittance = Complex(0.0, 0.0),
-                         .susceptance = 0.05,
-                         .status = false};
+                         .to_status = 1,
+                         .status = 0,   // Out of service
+                         .r1 = 0.02,    // resistance (ohm)
+                         .x1 = 0.06,    // reactance (ohm)
+                         .g1 = 0.0,     // conductance (siemens)
+                         .b1 = 0.05,    // susceptance (siemens)
+                         .k = 1.0,      // tap ratio
+                         .theta = 0.0,  // phase shift
+                         .sn = 100e6};  // 100 MVA rating
     network.branches = {branch};
 
     auto matrix = admittance->build_admittance_matrix(network);
@@ -235,28 +296,40 @@ void test_admittance_matrix_update_branch_status() {
     NetworkData network;
     network.num_buses = 2;
     network.num_branches = 1;
-    network.base_mva = 100.0;
 
     BusData bus1 = {.id = 1,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::SLACK,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
                     .active_power = 0.0,
-                    .reactive_power = 0.0,
-                    .bus_type = BusType::SLACK};
+                    .reactive_power = 0.0};
     BusData bus2 = {.id = 2,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
-                    .active_power = 100.0,
-                    .reactive_power = 50.0,
-                    .bus_type = BusType::PQ};
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 100e6,    // 100 MW
+                    .reactive_power = 50e6};  // 50 MVAr
     network.buses = {bus1, bus2};
 
-    BranchData branch = {.from_bus = 1,
+    BranchData branch = {.id = 1,
+                         .from_bus = 1,
+                         .from_status = 1,
                          .to_bus = 2,
-                         .impedance = Complex(0.02, 0.06),
-                         .admittance = Complex(0.0, 0.0),
-                         .susceptance = 0.05,
-                         .status = true};
+                         .to_status = 1,
+                         .status = 1,   // In service
+                         .r1 = 0.02,    // resistance (ohm)
+                         .x1 = 0.06,    // reactance (ohm)
+                         .g1 = 0.0,     // conductance (siemens)
+                         .b1 = 0.05,    // susceptance (siemens)
+                         .k = 1.0,      // tap ratio
+                         .theta = 0.0,  // phase shift
+                         .sn = 100e6};  // 100 MVA rating
     network.branches = {branch};
 
     auto original_matrix = admittance->build_admittance_matrix(network);
@@ -267,12 +340,19 @@ void test_admittance_matrix_update_branch_status() {
     // Complex original_off_diag = original_matrix->values[2];  // Assuming off-diagonal at index 2
 
     // Create branch change: take the branch out of service
-    std::vector<BranchData> changes = {{.from_bus = 1,
+    std::vector<BranchData> changes = {{.id = 1,
+                                        .from_bus = 1,
+                                        .from_status = 1,
                                         .to_bus = 2,
-                                        .impedance = Complex(0.02, 0.06),
-                                        .admittance = Complex(0.0, 0.0),
-                                        .susceptance = 0.05,
-                                        .status = false}};
+                                        .to_status = 1,
+                                        .status = 0,    // Out of service
+                                        .r1 = 0.02,     // resistance (ohm)
+                                        .x1 = 0.06,     // reactance (ohm)
+                                        .g1 = 0.0,      // conductance (siemens)
+                                        .b1 = 0.05,     // susceptance (siemens)
+                                        .k = 1.0,       // tap ratio
+                                        .theta = 0.0,   // phase shift
+                                        .sn = 100e6}};  // 100 MVA rating
 
     auto updated_matrix = admittance->update_admittance_matrix(*original_matrix, changes);
 
@@ -292,47 +372,76 @@ void test_admittance_matrix_multiple_branches() {
     NetworkData network;
     network.num_buses = 3;
     network.num_branches = 3;
-    network.base_mva = 100.0;
 
     BusData bus1 = {.id = 1,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::SLACK,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
                     .active_power = 0.0,
-                    .reactive_power = 0.0,
-                    .bus_type = BusType::SLACK};
+                    .reactive_power = 0.0};
     BusData bus2 = {.id = 2,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
-                    .active_power = 100.0,
-                    .reactive_power = 50.0,
-                    .bus_type = BusType::PQ};
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 100e6,    // 100 MW
+                    .reactive_power = 50e6};  // 50 MVAr
     BusData bus3 = {.id = 3,
-                    .voltage_magnitude = 1.0,
-                    .voltage_angle = 0.0,
-                    .active_power = 150.0,
-                    .reactive_power = 0.0,
-                    .bus_type = BusType::PV};
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PV,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 150e6,  // 150 MW
+                    .reactive_power = 0.0};
     network.buses = {bus1, bus2, bus3};
 
     // Create a star configuration: bus 1 connected to both bus 2 and bus 3
-    BranchData branch1 = {.from_bus = 1,
+    BranchData branch1 = {.id = 1,
+                          .from_bus = 1,
+                          .from_status = 1,
                           .to_bus = 2,
-                          .impedance = Complex(0.01, 0.03),
-                          .admittance = Complex(0.0, 0.0),
-                          .susceptance = 0.02,
-                          .status = true};
-    BranchData branch2 = {.from_bus = 1,
+                          .to_status = 1,
+                          .status = 1,
+                          .r1 = 0.01,    // resistance (ohm)
+                          .x1 = 0.03,    // reactance (ohm)
+                          .g1 = 0.0,     // conductance (siemens)
+                          .b1 = 0.02,    // susceptance (siemens)
+                          .k = 1.0,      // tap ratio
+                          .theta = 0.0,  // phase shift
+                          .sn = 100e6};  // 100 MVA rating
+    BranchData branch2 = {.id = 2,
+                          .from_bus = 1,
+                          .from_status = 1,
                           .to_bus = 3,
-                          .impedance = Complex(0.015, 0.04),
-                          .admittance = Complex(0.0, 0.0),
-                          .susceptance = 0.025,
-                          .status = true};
-    BranchData branch3 = {.from_bus = 2,
+                          .to_status = 1,
+                          .status = 1,
+                          .r1 = 0.015,   // resistance (ohm)
+                          .x1 = 0.04,    // reactance (ohm)
+                          .g1 = 0.0,     // conductance (siemens)
+                          .b1 = 0.025,   // susceptance (siemens)
+                          .k = 1.0,      // tap ratio
+                          .theta = 0.0,  // phase shift
+                          .sn = 100e6};  // 100 MVA rating
+    BranchData branch3 = {.id = 3,
+                          .from_bus = 2,
+                          .from_status = 1,
                           .to_bus = 3,
-                          .impedance = Complex(0.02, 0.05),
-                          .admittance = Complex(0.0, 0.0),
-                          .susceptance = 0.03,
-                          .status = true};
+                          .to_status = 1,
+                          .status = 1,
+                          .r1 = 0.02,    // resistance (ohm)
+                          .x1 = 0.05,    // reactance (ohm)
+                          .g1 = 0.0,     // conductance (siemens)
+                          .b1 = 0.03,    // susceptance (siemens)
+                          .k = 1.0,      // tap ratio
+                          .theta = 0.0,  // phase shift
+                          .sn = 100e6};  // 100 MVA rating
     network.branches = {branch1, branch2, branch3};
 
     auto matrix = admittance->build_admittance_matrix(network);

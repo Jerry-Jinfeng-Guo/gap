@@ -24,7 +24,6 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         std::vector<std::vector<std::pair<int, Complex>>> off_diagonal_elements(
             network_data.num_buses);
 
-        constexpr Complex one_comp{1.0, 0.0};
         // Iterate over all branches to build admittance matrix
         for (const auto& branch : network_data.branches) {
             if (!branch.status) {
@@ -34,17 +33,30 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
             int from_bus = branch.from_bus - 1;  // Convert to 0-based indexing
             int to_bus = branch.to_bus - 1;      // Convert to 0-based indexing
 
-            // Calculate branch admittance (Y = 1/Z)
-            Complex branch_admittance = one_comp / branch.impedance;
+            // Calculate branch admittance from r1, x1, g1, b1 parameters
+            // Series impedance: Z = r1 + j*x1
+            // Series admittance: Y_series = 1/Z = g1_calc + j*b1_calc
+            // where g1_calc = r1/(r1^2 + x1^2) and b1_calc = -x1/(r1^2 + x1^2)
+            double z_magnitude_sq = branch.r1 * branch.r1 + branch.x1 * branch.x1;
+            Complex series_admittance;
+            if (z_magnitude_sq > 1e-12) {  // Avoid division by zero
+                series_admittance =
+                    Complex(branch.r1 / z_magnitude_sq, -branch.x1 / z_magnitude_sq);
+            } else {
+                series_admittance = Complex(0.0, 0.0);  // Open circuit
+            }
+
+            // Add parallel conductance and susceptance
+            Complex branch_admittance = series_admittance + Complex(branch.g1, branch.b1);
 
             // Add to diagonal elements (self-admittance)
-            diagonal_elements[from_bus] +=
-                branch_admittance + Complex(0.0, branch.susceptance / 2.0);
-            diagonal_elements[to_bus] += branch_admittance + Complex(0.0, branch.susceptance / 2.0);
+            // Include half of line charging susceptance at each end
+            diagonal_elements[from_bus] += branch_admittance + Complex(0.0, branch.b1 / 2.0);
+            diagonal_elements[to_bus] += branch_admittance + Complex(0.0, branch.b1 / 2.0);
 
-            // Add off-diagonal elements (mutual admittance is negative)
-            off_diagonal_elements[from_bus].emplace_back(to_bus, -branch_admittance);
-            off_diagonal_elements[to_bus].emplace_back(from_bus, -branch_admittance);
+            // Add off-diagonal elements (mutual admittance is negative, only series part)
+            off_diagonal_elements[from_bus].emplace_back(to_bus, -series_admittance);
+            off_diagonal_elements[to_bus].emplace_back(from_bus, -series_admittance);
         }
 
         // Build CSR format sparse matrix
@@ -103,18 +115,26 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
                       << " (status: " << (branch_change.status ? "in-service" : "out-of-service")
                       << ")" << std::endl;
 
-            // Calculate branch admittance change
-            Complex branch_admittance_change = Complex(0.0, 0.0);
-            if (branch_change.status) {
-                // Branch coming into service - add admittance
-                branch_admittance_change = Complex(1.0, 0.0) / branch_change.impedance;
-            } else {
+            // Calculate branch admittance change using new r1, x1, g1, b1 parameters
+            Complex series_admittance_change = Complex(0.0, 0.0);
+            double z_magnitude_sq =
+                branch_change.r1 * branch_change.r1 + branch_change.x1 * branch_change.x1;
+            if (z_magnitude_sq > 1e-12) {  // Avoid division by zero
+                series_admittance_change =
+                    Complex(branch_change.r1 / z_magnitude_sq, -branch_change.x1 / z_magnitude_sq);
+            }
+
+            Complex total_admittance_change =
+                series_admittance_change + Complex(branch_change.g1, branch_change.b1);
+
+            if (!branch_change.status) {
                 // Branch going out of service - subtract admittance
-                branch_admittance_change = -(Complex(1.0, 0.0) / branch_change.impedance);
+                total_admittance_change = -total_admittance_change;
+                series_admittance_change = -series_admittance_change;
             }
 
             // Update diagonal elements (self-admittance changes)
-            Complex shunt_change = Complex(0.0, branch_change.susceptance / 2.0);
+            Complex shunt_change = Complex(0.0, branch_change.b1 / 2.0);
             if (!branch_change.status) {
                 shunt_change = -shunt_change;  // Remove shunt if going out of service
             }
@@ -131,13 +151,13 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
 
                     // Update diagonal elements
                     if (row == col && (row == from_bus || row == to_bus)) {
-                        updated_matrix->values[idx] += branch_admittance_change + shunt_change;
+                        updated_matrix->values[idx] += total_admittance_change + shunt_change;
                     }
-                    // Update off-diagonal elements
+                    // Update off-diagonal elements (only series admittance)
                     else if ((row == from_bus && col == to_bus) ||
                              (row == to_bus && col == from_bus)) {
                         updated_matrix->values[idx] -=
-                            branch_admittance_change;  // Off-diagonal is negative
+                            series_admittance_change;  // Off-diagonal is negative
                     }
                 }
             }

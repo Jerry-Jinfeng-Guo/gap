@@ -72,7 +72,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
             for (size_t i = 0; i < network_data.buses.size(); ++i) {
                 if (network_data.buses[i].bus_type == BusType::SLACK) {  // Slack bus
-                    h_voltages[i] = Complex(network_data.buses[i].voltage_magnitude, 0.0);
+                    h_voltages[i] = Complex(network_data.buses[i].u_pu, 0.0);
                 } else {
                     h_voltages[i] = Complex(1.0, 0.0);  // Flat start
                 }

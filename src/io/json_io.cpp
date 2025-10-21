@@ -13,7 +13,6 @@ class JsonIOModule : public IIOModule {
         std::cout << "JsonIOModule: Reading network data from " << filename << std::endl;
 
         NetworkData data;
-        data.base_mva = 100.0;
         data.num_buses = 0;
         data.num_branches = 0;
 

@@ -32,10 +32,25 @@ void test_mismatch_calculation() {
     // Create dummy network data
     NetworkData network;
     network.num_buses = 2;
-    network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.0, 0.0, 0.0, 0.0, BusType::SLACK};  // Slack bus
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};  // PQ bus
+    BusData bus1 = {.id = 1,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::SLACK,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0};  // Slack bus
+    BusData bus2 = {.id = 2,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 100e6,    // 100 MW
+                    .reactive_power = 50e6};  // 50 MVAr
     network.buses = {bus1, bus2};
 
     // Create dummy admittance matrix
@@ -59,10 +74,25 @@ void test_powerflow_solve_simple() {
     // Create simple test case
     NetworkData network;
     network.num_buses = 2;
-    network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, BusType::SLACK};  // Slack bus
-    BusData bus2 = {2, 1.0, 0.0, 50.0, 30.0, BusType::PQ};    // PQ bus
+    BusData bus1 = {.id = 1,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::SLACK,
+                    .u = 241500.0,  // 1.05 p.u.
+                    .u_pu = 1.05,
+                    .u_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0};  // Slack bus
+    BusData bus2 = {.id = 2,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 50e6,     // 50 MW
+                    .reactive_power = 30e6};  // 30 MVAr
     network.buses = {bus1, bus2};
 
     // Create dummy admittance matrix

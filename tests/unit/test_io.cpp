@@ -35,11 +35,11 @@ void test_network_data_reading() {
     // Create a dummy network file
     std::string test_file = "test_network.json";
     std::ofstream file(test_file);
-    file << "{ \"buses\": [], \"branches\": [], \"base_mva\": 100.0 }" << std::endl;
+    file << "{ \"buses\": [], \"branches\": [] }" << std::endl;
     file.close();
 
     NetworkData data = io_module->read_network_data(test_file);
-    ASSERT_EQ(100.0, data.base_mva);
+    ASSERT_EQ(0, data.num_buses);
 
     // Clean up
     std::remove(test_file.c_str());

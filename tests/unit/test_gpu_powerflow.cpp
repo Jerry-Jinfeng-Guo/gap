@@ -22,13 +22,44 @@ void test_gpu_powerflow_convergence() {
     // Create a small test system
     NetworkData network;
     network.num_buses = 4;
-    network.base_mva = 100.0;
 
     // Create buses: 1 slack, 2 PQ, 1 PV
-    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, BusType::SLACK};  // Slack
-    BusData bus2 = {2, 1.0, 0.0, 120.0, 80.0, BusType::PQ};   // PQ
-    BusData bus3 = {3, 1.0, 0.0, 100.0, 60.0, BusType::PQ};   // PQ
-    BusData bus4 = {4, 1.02, 0.0, -80.0, 0.0, BusType::PV};   // PV (generator)
+    BusData bus1 = {.id = 1,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::SLACK,
+                    .u = 241500.0,
+                    .u_pu = 1.05,
+                    .u_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0};  // Slack
+    BusData bus2 = {.id = 2,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 120e6,
+                    .reactive_power = 80e6};  // PQ
+    BusData bus3 = {.id = 3,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 100e6,
+                    .reactive_power = 60e6};  // PQ
+    BusData bus4 = {.id = 4,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PV,
+                    .u = 234600.0,
+                    .u_pu = 1.02,
+                    .u_angle = 0.0,
+                    .active_power = -80e6,
+                    .reactive_power = 0.0};  // PV (generator)
 
     network.buses = {bus1, bus2, bus3, bus4};
 
@@ -78,10 +109,25 @@ void test_gpu_powerflow_different_configs() {
     // Simple 2-bus system
     NetworkData network;
     network.num_buses = 2;
-    network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, BusType::SLACK};
-    BusData bus2 = {2, 1.0, 0.0, 50.0, 30.0, BusType::PQ};
+    BusData bus1 = {.id = 1,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::SLACK,
+                    .u = 241500.0,
+                    .u_pu = 1.05,
+                    .u_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0};
+    BusData bus2 = {.id = 2,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 50e6,
+                    .reactive_power = 30e6};
     network.buses = {bus1, bus2};
 
     SparseMatrix matrix;

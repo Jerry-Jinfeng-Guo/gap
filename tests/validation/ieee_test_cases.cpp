@@ -17,45 +17,92 @@ void test_ieee14_bus_case() {
     NetworkData network;
     network.num_buses = 14;
     network.num_branches = 20;
-    network.base_mva = 100.0;
 
     // Create buses (simplified data for testing framework)
-    network.buses.push_back({1, 1.060, 0.0, 0.0, 0.0, BusType::SLACK});  // Slack bus
-    network.buses.push_back({2, 1.045, 0.0, 40.0, 42.4, BusType::PV});   // PV bus (generator)
-    network.buses.push_back({3, 1.010, 0.0, 0.0, 23.4, BusType::PV});    // PV bus (generator)
-    network.buses.push_back({4, 1.0, 0.0, 47.8, -3.9, BusType::PQ});     // PQ bus
-    network.buses.push_back({5, 1.0, 0.0, 7.6, 1.6, BusType::PQ});       // PQ bus
+    network.buses.push_back({.id = 1,
+                             .energized = 1,
+                             .u_rated = 132000.0,
+                             .bus_type = BusType::SLACK,
+                             .u = 139920.0,
+                             .u_pu = 1.060,
+                             .u_angle = 0.0,
+                             .active_power = 0.0,
+                             .reactive_power = 0.0});  // Slack bus
+    network.buses.push_back({.id = 2,
+                             .energized = 1,
+                             .u_rated = 132000.0,
+                             .bus_type = BusType::PV,
+                             .u = 137940.0,
+                             .u_pu = 1.045,
+                             .u_angle = 0.0,
+                             .active_power = 40e6,
+                             .reactive_power = 42.4e6});  // PV bus (generator)
+    network.buses.push_back({.id = 3,
+                             .energized = 1,
+                             .u_rated = 132000.0,
+                             .bus_type = BusType::PV,
+                             .u = 133320.0,
+                             .u_pu = 1.010,
+                             .u_angle = 0.0,
+                             .active_power = 0.0,
+                             .reactive_power = 23.4e6});  // PV bus (generator)
+    network.buses.push_back({.id = 4,
+                             .energized = 1,
+                             .u_rated = 132000.0,
+                             .bus_type = BusType::PQ,
+                             .u = 132000.0,
+                             .u_pu = 1.0,
+                             .u_angle = 0.0,
+                             .active_power = 47.8e6,
+                             .reactive_power = -3.9e6});  // PQ bus
+    network.buses.push_back({.id = 5,
+                             .energized = 1,
+                             .u_rated = 132000.0,
+                             .bus_type = BusType::PQ,
+                             .u = 132000.0,
+                             .u_pu = 1.0,
+                             .u_angle = 0.0,
+                             .active_power = 7.6e6,
+                             .reactive_power = 1.6e6});  // PQ bus
 
     // Add remaining buses (PQ type)
     for (int i = 6; i <= 14; ++i) {
-        BusData bus = {i, 1.0, 0.0, 0.0, 0.0, BusType::PQ};
+        BusData bus = {.id = i,
+                       .energized = 1,
+                       .u_rated = 132000.0,
+                       .bus_type = BusType::PQ,
+                       .u = 132000.0,
+                       .u_pu = 1.0,
+                       .u_angle = 0.0,
+                       .active_power = 0.0,
+                       .reactive_power = 0.0};
         if (i == 6) {
-            bus.active_power = 11.2;
-            bus.reactive_power = 7.5;
+            bus.active_power = 11.2e6;   // 11.2 MW
+            bus.reactive_power = 7.5e6;  // 7.5 MVAr
         }
         if (i == 9) {
-            bus.active_power = 29.5;
-            bus.reactive_power = 16.6;
+            bus.active_power = 29.5e6;    // 29.5 MW
+            bus.reactive_power = 16.6e6;  // 16.6 MVAr
         }
         if (i == 10) {
-            bus.active_power = 9.0;
-            bus.reactive_power = 5.8;
+            bus.active_power = 9.0e6;    // 9.0 MW
+            bus.reactive_power = 5.8e6;  // 5.8 MVAr
         }
         if (i == 11) {
-            bus.active_power = 3.5;
-            bus.reactive_power = 1.8;
+            bus.active_power = 3.5e6;    // 3.5 MW
+            bus.reactive_power = 1.8e6;  // 1.8 MVAr
         }
         if (i == 12) {
-            bus.active_power = 6.1;
-            bus.reactive_power = 1.6;
+            bus.active_power = 6.1e6;    // 6.1 MW
+            bus.reactive_power = 1.6e6;  // 1.6 MVAr
         }
         if (i == 13) {
-            bus.active_power = 13.5;
-            bus.reactive_power = 5.8;
+            bus.active_power = 13.5e6;   // 13.5 MW
+            bus.reactive_power = 5.8e6;  // 5.8 MVAr
         }
         if (i == 14) {
-            bus.active_power = 14.9;
-            bus.reactive_power = 5.0;
+            bus.active_power = 14.9e6;   // 14.9 MW
+            bus.reactive_power = 5.0e6;  // 5.0 MVAr
         }
         network.buses.push_back(bus);
     }
@@ -138,12 +185,35 @@ void test_simple_3bus_case() {
 
     NetworkData network;
     network.num_buses = 3;
-    network.base_mva = 100.0;
 
     // Create 3-bus system: 1 generator, 2 loads
-    network.buses.push_back({1, 1.05, 0.0, 0.0, 0.0, BusType::SLACK});  // Slack
-    network.buses.push_back({2, 1.0, 0.0, 100.0, 50.0, BusType::PQ});   // Load
-    network.buses.push_back({3, 1.0, 0.0, 80.0, 40.0, BusType::PQ});    // Load
+    network.buses.push_back({.id = 1,
+                             .energized = 1,
+                             .u_rated = 230000.0,
+                             .bus_type = BusType::SLACK,
+                             .u = 241500.0,
+                             .u_pu = 1.05,
+                             .u_angle = 0.0,
+                             .active_power = 0.0,
+                             .reactive_power = 0.0});  // Slack
+    network.buses.push_back({.id = 2,
+                             .energized = 1,
+                             .u_rated = 230000.0,
+                             .bus_type = BusType::PQ,
+                             .u = 230000.0,
+                             .u_pu = 1.0,
+                             .u_angle = 0.0,
+                             .active_power = 100e6,
+                             .reactive_power = 50e6});  // Load
+    network.buses.push_back({.id = 3,
+                             .energized = 1,
+                             .u_rated = 230000.0,
+                             .bus_type = BusType::PQ,
+                             .u = 230000.0,
+                             .u_pu = 1.0,
+                             .u_angle = 0.0,
+                             .active_power = 80e6,
+                             .reactive_power = 40e6});  // Load
 
     // Create simple Y-matrix (star configuration)
     SparseMatrix matrix;
@@ -199,13 +269,52 @@ void test_backend_comparison() {
     // Create identical test case for both backends
     NetworkData network;
     network.num_buses = 5;
-    network.base_mva = 100.0;
 
-    network.buses.push_back({1, 1.06, 0.0, 0.0, 0.0, BusType::SLACK});
-    network.buses.push_back({2, 1.0, 0.0, 50.0, 30.0, BusType::PQ});
-    network.buses.push_back({3, 1.0, 0.0, 60.0, 35.0, BusType::PQ});
-    network.buses.push_back({4, 1.02, 0.0, -40.0, 0.0, BusType::PV});  // Generator
-    network.buses.push_back({5, 1.0, 0.0, 70.0, 40.0, BusType::PQ});
+    network.buses.push_back({.id = 1,
+                             .energized = 1,
+                             .u_rated = 230000.0,
+                             .bus_type = BusType::SLACK,
+                             .u = 243800.0,
+                             .u_pu = 1.06,
+                             .u_angle = 0.0,
+                             .active_power = 0.0,
+                             .reactive_power = 0.0});
+    network.buses.push_back({.id = 2,
+                             .energized = 1,
+                             .u_rated = 230000.0,
+                             .bus_type = BusType::PQ,
+                             .u = 230000.0,
+                             .u_pu = 1.0,
+                             .u_angle = 0.0,
+                             .active_power = 50e6,
+                             .reactive_power = 30e6});
+    network.buses.push_back({.id = 3,
+                             .energized = 1,
+                             .u_rated = 230000.0,
+                             .bus_type = BusType::PQ,
+                             .u = 230000.0,
+                             .u_pu = 1.0,
+                             .u_angle = 0.0,
+                             .active_power = 60e6,
+                             .reactive_power = 35e6});
+    network.buses.push_back({.id = 4,
+                             .energized = 1,
+                             .u_rated = 230000.0,
+                             .bus_type = BusType::PV,
+                             .u = 234600.0,
+                             .u_pu = 1.02,
+                             .u_angle = 0.0,
+                             .active_power = -40e6,
+                             .reactive_power = 0.0});  // Generator
+    network.buses.push_back({.id = 5,
+                             .energized = 1,
+                             .u_rated = 230000.0,
+                             .bus_type = BusType::PQ,
+                             .u = 230000.0,
+                             .u_pu = 1.0,
+                             .u_angle = 0.0,
+                             .active_power = 70e6,
+                             .reactive_power = 40e6});
 
     SparseMatrix matrix;
     matrix.num_rows = 5;

@@ -20,7 +20,6 @@ void test_gpu_admittance_functionality() {
     NetworkData network;
     network.num_buses = 5;
     network.num_branches = 4;
-    network.base_mva = 100.0;
 
     auto matrix = admittance->build_admittance_matrix(network);
     ASSERT_TRUE(matrix != nullptr);
@@ -64,11 +63,34 @@ void test_gpu_powerflow_functionality() {
 
     NetworkData network;
     network.num_buses = 3;
-    network.base_mva = 100.0;
 
-    BusData bus1 = {1, 1.05, 0.0, 0.0, 0.0, BusType::SLACK};
-    BusData bus2 = {2, 1.0, 0.0, 100.0, 50.0, BusType::PQ};
-    BusData bus3 = {3, 1.0, 0.0, 80.0, 40.0, BusType::PQ};
+    BusData bus1 = {.id = 1,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::SLACK,
+                    .u = 241500.0,
+                    .u_pu = 1.05,
+                    .u_angle = 0.0,
+                    .active_power = 0.0,
+                    .reactive_power = 0.0};
+    BusData bus2 = {.id = 2,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 100e6,
+                    .reactive_power = 50e6};
+    BusData bus3 = {.id = 3,
+                    .energized = 1,
+                    .u_rated = 230000.0,
+                    .bus_type = BusType::PQ,
+                    .u = 230000.0,
+                    .u_pu = 1.0,
+                    .u_angle = 0.0,
+                    .active_power = 80e6,
+                    .reactive_power = 40e6};
     network.buses = {bus1, bus2, bus3};
 
     SparseMatrix matrix;

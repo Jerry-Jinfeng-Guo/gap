@@ -172,6 +172,7 @@ if [[ "$ENABLE_CUDA" == "ON" ]]; then
             print_warning "GCC version $GCC_VERSION is too new for CUDA. Using gcc-13 for CUDA compilation."
             CMAKE_ARGS+=(-DCMAKE_C_COMPILER=gcc-13)
             CMAKE_ARGS+=(-DCMAKE_CXX_COMPILER=g++-13)
+            CMAKE_ARGS+=(-DCMAKE_CUDA_HOST_COMPILER=g++-13)
         else
             print_warning "GCC version $GCC_VERSION detected but gcc-13 not found. Adding -allow-unsupported-compiler flag for CUDA."
             CMAKE_ARGS+=(-DCMAKE_CUDA_FLAGS="-allow-unsupported-compiler")
@@ -185,6 +186,7 @@ if [[ "$ENABLE_CUDA" == "ON" ]]; then
     fi
 elif [[ "$ENABLE_CUDA" == "OFF" ]]; then
     CMAKE_ARGS+=(-DGAP_ENABLE_CUDA=OFF)
+    CMAKE_ARGS+=(-DCMAKE_DISABLE_FIND_PACKAGE_CUDAToolkit=TRUE)
 fi
 
 # Configure with CMake

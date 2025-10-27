@@ -225,7 +225,6 @@ BranchData convertPgmTransformer(const JsonValue& pgm_transformer) {
     double u2 = pgm_transformer["u2"].asNumber();  // Secondary voltage (V)
     double sn = pgm_transformer["sn"].asNumber();  // Rated power (VA)
     double uk = pgm_transformer["uk"].asNumber();  // Short-circuit voltage (p.u.)
-    double pk = pgm_transformer["pk"].asNumber();  // Losses at rated power (W)
 
     // Calculate transformer parameters
     // uk is the short-circuit voltage in p.u. on the transformer rated power

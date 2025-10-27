@@ -5,6 +5,7 @@ add_executable(gap_unit_tests
     unit/test_admittance.cpp
     unit/test_lu_solver.cpp
     unit/test_powerflow.cpp
+    unit/test_pgm_io.cpp
 )
 
 target_include_directories(gap_unit_tests PUBLIC
@@ -17,6 +18,20 @@ target_link_libraries(gap_unit_tests
     gap_admittance_cpu
     gap_lu_cpu
     gap_powerflow_cpu
+)
+
+# PGM IO tests
+add_executable(gap_pgm_tests
+    unit/test_pgm_io.cpp
+)
+
+target_include_directories(gap_pgm_tests PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(gap_pgm_tests
+    gap_core
+    gap_io
 )
 
 # Validation tests

@@ -34,18 +34,18 @@ void test_mismatch_calculation() {
     network.num_buses = 2;
 
     BusData bus1 = {.id = 1,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::SLACK,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
                     .active_power = 0.0,
                     .reactive_power = 0.0};  // Slack bus
     BusData bus2 = {.id = 2,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::PQ,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
@@ -76,18 +76,18 @@ void test_powerflow_solve_simple() {
     network.num_buses = 2;
 
     BusData bus1 = {.id = 1,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::SLACK,
+                    .energized = 1,
                     .u = 241500.0,  // 1.05 p.u.
                     .u_pu = 1.05,
                     .u_angle = 0.0,
                     .active_power = 0.0,
                     .reactive_power = 0.0};  // Slack bus
     BusData bus2 = {.id = 2,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::PQ,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,

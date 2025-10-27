@@ -1,12 +1,18 @@
 cmake_minimum_required(VERSION 3.18)
 
+# Check if CUDA is explicitly disabled or if we should try to enable it
+set(GAP_ENABLE_CUDA_DEFAULT ON)
+if(DEFINED GAP_ENABLE_CUDA)
+    # Use the explicitly set value
+    set(GAP_ENABLE_CUDA_DEFAULT ${GAP_ENABLE_CUDA})
+endif()
 
-
-# Check if CUDA is disabled
-if(CMAKE_DISABLE_FIND_PACKAGE_CUDAToolkit)
+# Check if CUDA is disabled via CMake flag or GAP_ENABLE_CUDA variable
+if(CMAKE_DISABLE_FIND_PACKAGE_CUDAToolkit OR (DEFINED GAP_ENABLE_CUDA AND NOT GAP_ENABLE_CUDA))
     # Project without CUDA
     project(GAP VERSION 1.0.0 LANGUAGES C CXX)
     set(GAP_ENABLE_CUDA OFF)
+    message(STATUS "CUDA explicitly disabled - building CPU-only version")
 else()
     # Try to enable CUDA, fallback to C++ only if not available
     

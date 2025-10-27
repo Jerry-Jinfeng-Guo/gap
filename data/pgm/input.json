@@ -89,16 +89,6 @@
         "p_specified": 60e3,
         "q_specified": 0
       }
-    ],
-    "asym_load": [
-      {
-        "id": 10,
-        "node": 4,
-        "status": 1,
-        "type": 0,
-        "p_specified": [30e3, 0, 0],
-        "q_specified": [0.0, 0.0, 10e3]
-      }
     ]
   }
 }

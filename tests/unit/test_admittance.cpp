@@ -22,27 +22,27 @@ void test_admittance_matrix_build() {
     network.num_branches = 2;
 
     BusData bus1 = {.id = 1,
-                    .energized = 1,
                     .u_rated = 230000.0,  // 230 kV nominal voltage
                     .bus_type = BusType::SLACK,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
                     .active_power = 0.0,
                     .reactive_power = 0.0};  // Slack bus
     BusData bus2 = {.id = 2,
-                    .energized = 1,
                     .u_rated = 230000.0,  // 230 kV nominal voltage
                     .bus_type = BusType::PQ,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
                     .active_power = 100e6,    // 100 MW in watts
                     .reactive_power = 50e6};  // 50 MVAr in VAr
     BusData bus3 = {.id = 3,
-                    .energized = 1,
                     .u_rated = 230000.0,  // 230 kV nominal voltage
                     .bus_type = BusType::PV,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
@@ -95,18 +95,18 @@ void test_admittance_matrix_branch_iteration() {
     network.num_branches = 1;
 
     BusData bus1 = {.id = 1,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::SLACK,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
                     .active_power = 0.0,
                     .reactive_power = 0.0};
     BusData bus2 = {.id = 2,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::PQ,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
@@ -160,27 +160,27 @@ void test_admittance_matrix_three_bus_system() {
     network.num_branches = 2;
 
     BusData bus1 = {.id = 1,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::SLACK,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
                     .active_power = 0.0,
                     .reactive_power = 0.0};
     BusData bus2 = {.id = 2,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::PQ,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
                     .active_power = 100e6,    // 100 MW
                     .reactive_power = 50e6};  // 50 MVAr
     BusData bus3 = {.id = 3,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::PV,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
@@ -240,18 +240,18 @@ void test_admittance_matrix_out_of_service_branch() {
     network.num_branches = 1;
 
     BusData bus1 = {.id = 1,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::SLACK,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
                     .active_power = 0.0,
                     .reactive_power = 0.0};
     BusData bus2 = {.id = 2,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::PQ,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
@@ -298,18 +298,18 @@ void test_admittance_matrix_update_branch_status() {
     network.num_branches = 1;
 
     BusData bus1 = {.id = 1,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::SLACK,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
                     .active_power = 0.0,
                     .reactive_power = 0.0};
     BusData bus2 = {.id = 2,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::PQ,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
@@ -374,27 +374,27 @@ void test_admittance_matrix_multiple_branches() {
     network.num_branches = 3;
 
     BusData bus1 = {.id = 1,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::SLACK,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
                     .active_power = 0.0,
                     .reactive_power = 0.0};
     BusData bus2 = {.id = 2,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::PQ,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,
                     .active_power = 100e6,    // 100 MW
                     .reactive_power = 50e6};  // 50 MVAr
     BusData bus3 = {.id = 3,
-                    .energized = 1,
                     .u_rated = 230000.0,
                     .bus_type = BusType::PV,
+                    .energized = 1,
                     .u = 230000.0,
                     .u_pu = 1.0,
                     .u_angle = 0.0,

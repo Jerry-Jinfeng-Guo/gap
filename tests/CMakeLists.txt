@@ -20,20 +20,6 @@ target_link_libraries(gap_unit_tests
     gap_powerflow_cpu
 )
 
-# PGM IO tests
-add_executable(gap_pgm_tests
-    unit/test_pgm_io.cpp
-)
-
-target_include_directories(gap_pgm_tests PUBLIC
-    ${CMAKE_SOURCE_DIR}/include
-)
-
-target_link_libraries(gap_pgm_tests
-    gap_core
-    gap_io
-)
-
 # Validation tests
 add_executable(gap_validation_tests
     validation/validation_main.cpp

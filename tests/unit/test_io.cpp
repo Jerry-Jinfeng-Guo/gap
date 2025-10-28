@@ -32,14 +32,27 @@ void test_json_validation() {
 void test_network_data_reading() {
     auto io_module = core::BackendFactory::create_io_module();
 
-    // Create a dummy network file
+    // Create a dummy PGM network file with empty network
     std::string test_file = "test_network.json";
     std::ofstream file(test_file);
-    file << "{ \"buses\": [], \"branches\": [] }" << std::endl;
+    file << R"({
+  "version": "1.0",
+  "type": "input",
+  "is_batch": false,
+  "attributes": {},
+  "data": {
+    "node": [],
+    "line": [],
+    "source": [],
+    "sym_load": []
+  }
+})" << std::endl;
     file.close();
 
     NetworkData data = io_module->read_network_data(test_file);
     ASSERT_EQ(0, data.num_buses);
+    ASSERT_EQ(0, data.num_branches);
+    ASSERT_EQ(0, data.num_appliances);
 
     // Clean up
     std::remove(test_file.c_str());

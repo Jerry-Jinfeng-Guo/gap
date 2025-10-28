@@ -4,6 +4,7 @@
  */
 
 #include <cassert>
+#include <filesystem>
 #include <iostream>
 
 #include "gap/core/backend_factory.h"
@@ -13,6 +14,34 @@
 #include "test_framework.h"
 
 using namespace gap;
+
+// Helper function to find the correct path to test data files
+std::string find_data_file(const std::string& relative_path) {
+    // Try current directory first (when running from project root)
+    if (std::filesystem::exists(relative_path)) {
+        return relative_path;
+    }
+
+    // Try from build directory (when running from build/)
+    std::string from_build = "../" + relative_path;
+    if (std::filesystem::exists(from_build)) {
+        return from_build;
+    }
+
+    // Try absolute path construction
+    std::string cwd = std::filesystem::current_path().string();
+
+    // If we're in build directory, go up one level
+    if (cwd.ends_with("/build")) {
+        std::string from_parent = "../" + relative_path;
+        if (std::filesystem::exists(from_parent)) {
+            return from_parent;
+        }
+    }
+
+    // Last resort: return original path and let it fail with clear error
+    return relative_path;
+}
 using namespace gap::io;
 using namespace gap::core;
 
@@ -23,7 +52,8 @@ void test_pgm_json_io() {
 
     try {
         // Test reading the PGM input file
-        NetworkData network = io->read_network_data("data/pgm/network_1.json");
+        std::string network_file = find_data_file("data/pgm/network_1.json");
+        NetworkData network = io->read_network_data(network_file);
 
         // Verify structure
         std::cout << "Network structure:" << std::endl;
@@ -99,7 +129,8 @@ void test_transformer_network() {
     auto io = BackendFactory::create_io_module();
 
     try {
-        NetworkData network = io->read_network_data("data/pgm/network_2.json");
+        std::string network_file = find_data_file("data/pgm/network_2.json");
+        NetworkData network = io->read_network_data(network_file);
 
         // Verify structure for transformer network
         std::cout << "Transformer network structure:" << std::endl;
@@ -161,7 +192,8 @@ void test_generic_branch_network() {
     auto io = BackendFactory::create_io_module();
 
     try {
-        NetworkData network = io->read_network_data("data/pgm/network_3.json");
+        std::string network_file = find_data_file("data/pgm/network_3.json");
+        NetworkData network = io->read_network_data(network_file);
 
         // Verify structure for generic branch network
         std::cout << "Generic branch network structure:" << std::endl;

@@ -17,31 +17,48 @@ using namespace gap;
 
 // Helper function to find the correct path to test data files
 std::string find_data_file(const std::string& relative_path) {
-    // Try current directory first (when running from project root)
-    if (std::filesystem::exists(relative_path)) {
-        return relative_path;
-    }
-
-    // Try from build directory (when running from build/)
-    std::string from_build = "../" + relative_path;
-    if (std::filesystem::exists(from_build)) {
-        return from_build;
-    }
-
-    // Try absolute path construction
+    // Get current working directory for path resolution
     std::string cwd = std::filesystem::current_path().string();
 
-    // If we're in build directory, go up one level
-    if (cwd.ends_with("/build")) {
-        std::string from_parent = "../" + relative_path;
-        if (std::filesystem::exists(from_parent)) {
-            return from_parent;
+    // List of possible paths to try in order
+    std::vector<std::string> candidates = {
+        // Direct path from project root
+        relative_path,
+        // From build directory
+        "../" + relative_path,
+        // From build/bin directory (VS Code Test Explorer often runs from here)
+        "../../" + relative_path,
+        // From build/tests directory
+        "../../" + relative_path,
+        // From any subdirectory in build/
+        "../" + relative_path,
+        // Absolute construction based on current directory
+        cwd + "/" + relative_path};
+
+    // If we can detect we're in a build-related directory, add more candidates
+    if (cwd.find("/build") != std::string::npos) {
+        // Find the project root by going up from build directory
+        std::string project_root = cwd;
+        size_t build_pos = project_root.find("/build");
+        if (build_pos != std::string::npos) {
+            project_root = project_root.substr(0, build_pos);
+            candidates.push_back(project_root + "/" + relative_path);
+        }
+    }
+
+    // Try each candidate path
+    for (const auto& candidate : candidates) {
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
         }
     }
 
     // Last resort: return original path and let it fail with clear error
+    std::cerr << "ERROR: Could not find " << relative_path << " in any of " << candidates.size()
+              << " expected locations from working directory: " << cwd << std::endl;
     return relative_path;
 }
+
 using namespace gap::io;
 using namespace gap::core;
 

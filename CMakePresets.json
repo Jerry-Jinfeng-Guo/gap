@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Default Config",
+      "description": "Default build configuration with CUDA support",
+      "binaryDir": "build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "GAP_ENABLE_CUDA": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug Config", 
+      "description": "Debug build configuration",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "cpu-only",
+      "displayName": "CPU Only",
+      "description": "CPU-only build without CUDA",
+      "binaryDir": "build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "GAP_ENABLE_CUDA": "OFF",
+        "CMAKE_DISABLE_FIND_PACKAGE_CUDAToolkit": "TRUE"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "jobs": 8
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug", 
+      "jobs": 8
+    },
+    {
+      "name": "cpu-only",
+      "configurePreset": "cpu-only",
+      "jobs": 8
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

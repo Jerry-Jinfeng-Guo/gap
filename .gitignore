@@ -21,6 +21,9 @@ Makefile
 !CMakeLists.txt
 !cmake/*.cmake
 
+# User-specific CMake presets (keep CMakePresets.json but ignore user overrides)
+CMakeUserPresets.json
+
 # IDE files
 .vscode/
 .idea/

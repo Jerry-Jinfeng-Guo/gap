@@ -165,18 +165,13 @@ CMAKE_ARGS=(
 )
 
 if [[ "$ENABLE_CUDA" == "ON" ]]; then
-    # Check GCC version and use GCC 13 if current version is too new for CUDA
+    # Check GCC version compatibility with CUDA 13
     GCC_VERSION=$(gcc -dumpversion | cut -d. -f1)
-    if [[ "$GCC_VERSION" -gt 13 ]]; then
-        if command -v gcc-13 &> /dev/null; then
-            print_warning "GCC version $GCC_VERSION is too new for CUDA. Using gcc-13 for CUDA compilation."
-            CMAKE_ARGS+=(-DCMAKE_C_COMPILER=gcc-13)
-            CMAKE_ARGS+=(-DCMAKE_CXX_COMPILER=g++-13)
-            CMAKE_ARGS+=(-DCMAKE_CUDA_HOST_COMPILER=g++-13)
-        else
-            print_warning "GCC version $GCC_VERSION detected but gcc-13 not found. Adding -allow-unsupported-compiler flag for CUDA."
-            CMAKE_ARGS+=(-DCMAKE_CUDA_FLAGS="-allow-unsupported-compiler")
-        fi
+    if [[ "$GCC_VERSION" -gt 14 ]]; then
+        print_warning "GCC version $GCC_VERSION may be too new for CUDA. Consider using GCC 14 or adding -allow-unsupported-compiler flag."
+        CMAKE_ARGS+=(-DCMAKE_CUDA_FLAGS="-allow-unsupported-compiler")
+    else
+        print_status "Using GCC $GCC_VERSION with CUDA 13 (compatible)"
     fi
     
     # Use project's CUDA configuration

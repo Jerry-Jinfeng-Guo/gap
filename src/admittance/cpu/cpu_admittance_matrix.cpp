@@ -82,11 +82,6 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         matrix->row_ptr.push_back(0);
 
         for (int i = 0; i < network_data.num_buses; ++i) {
-            // Add diagonal element
-            matrix->col_idx.push_back(i);
-            matrix->values.push_back(diagonal_elements[i]);
-            nnz++;
-
             // Sort off-diagonal elements by column index
             std::sort(off_diagonal_elements[i].begin(), off_diagonal_elements[i].end(),
                       [](const std::pair<int, std::complex<double>>& a,
@@ -94,8 +89,25 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
                           return a.first < b.first;  // Sort by column index only
                       });
 
+            // Build complete row with proper column ordering
+            std::vector<std::pair<int, Complex>> row_elements;
+
+            // Add diagonal element
+            row_elements.emplace_back(i, diagonal_elements[i]);
+
             // Add off-diagonal elements
             for (const auto& [col, value] : off_diagonal_elements[i]) {
+                row_elements.emplace_back(col, value);
+            }
+
+            // Sort all elements (diagonal + off-diagonal) by column index
+            std::sort(row_elements.begin(), row_elements.end(),
+                      [](const std::pair<int, Complex>& a, const std::pair<int, Complex>& b) {
+                          return a.first < b.first;
+                      });
+
+            // Add sorted elements to CSR arrays
+            for (const auto& [col, value] : row_elements) {
                 matrix->col_idx.push_back(col);
                 matrix->values.push_back(value);
                 nnz++;

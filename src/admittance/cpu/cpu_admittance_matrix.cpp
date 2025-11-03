@@ -14,6 +14,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         std::cout << "CPUAdmittanceMatrix: Building admittance matrix" << std::endl;
         std::cout << "  Number of buses: " << network_data.num_buses << std::endl;
         std::cout << "  Number of branches: " << network_data.num_branches << std::endl;
+        std::cout << "  Number of appliances: " << network_data.appliances.size() << std::endl;
 
         auto matrix = std::make_unique<SparseMatrix>();
         matrix->num_rows = network_data.num_buses;
@@ -23,6 +24,18 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         std::vector<Complex> diagonal_elements(network_data.num_buses, Complex(0.0, 0.0));
         std::vector<std::vector<std::pair<int, Complex>>> off_diagonal_elements(
             network_data.num_buses);
+
+        // Process shunt appliances (capacitors, reactors) first
+        // Use actual appliances vector size rather than potentially uninitialized num_appliances
+        for (const auto& appliance : network_data.appliances) {
+            if (appliance.type == ApplianceType::SHUNT) {
+                int bus_idx = appliance.node - 1;  // Convert to 0-based indexing
+                if (bus_idx >= 0 && bus_idx < network_data.num_buses) {
+                    // Add shunt admittance to diagonal element
+                    diagonal_elements[bus_idx] += Complex(appliance.g1, appliance.b1);
+                }
+            }
+        }
 
         // Iterate over all branches to build admittance matrix
         for (const auto& branch : network_data.branches) {

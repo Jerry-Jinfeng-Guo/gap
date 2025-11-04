@@ -2,6 +2,7 @@
 #include <cmath>
 #include <iostream>
 
+#include "gap/logging/logger.h"
 #include "gap/solver/powerflow_interface.h"
 
 namespace gap::solver {
@@ -9,23 +10,25 @@ namespace gap::solver {
 class CPUNewtonRaphson : public IPowerFlowSolver {
   private:
     std::shared_ptr<ILUSolver> lu_solver_;
+    gap::logging::Logger& logger = gap::logging::global_logger;
 
   public:
     PowerFlowResult solve_power_flow(const NetworkData& network_data,
                                      const SparseMatrix& admittance_matrix,
                                      const PowerFlowConfig& config) override {
         // TODO: Implement CPU-based Newton-Raphson power flow solver
-        std::cout << "CPUNewtonRaphson: Starting power flow solution" << std::endl;
-        std::cout << "  Number of buses: " << network_data.num_buses << std::endl;
-        std::cout << "  Tolerance: " << config.tolerance << std::endl;
-        std::cout << "  Max iterations: " << config.max_iterations << std::endl;
+        logger.setComponent("CPUNewtonRaphson");
+        LOG_INFO(logger, "Starting power flow solution");
+        LOG_DEBUG(logger, "  Number of buses:", network_data.num_buses);
+        LOG_DEBUG(logger, "  Tolerance:", config.tolerance);
+        LOG_DEBUG(logger, "  Max iterations:", config.max_iterations);
 
         PowerFlowResult result;
         result.bus_voltages.resize(network_data.num_buses);
 
         // Initialize voltages (flat start or previous solution)
         if (config.use_flat_start) {
-            std::cout << "  Using flat start initialization" << std::endl;
+            LOG_DEBUG(logger, "  Using flat start initialization");
             for (size_t i = 0; i < network_data.buses.size(); ++i) {
                 if (network_data.buses[i].bus_type == BusType::SLACK) {  // Slack bus
                     result.bus_voltages[i] = Complex(network_data.buses[i].u_pu, 0.0);
@@ -38,7 +41,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         // Newton-Raphson iterations
         for (int iter = 0; iter < config.max_iterations; ++iter) {
             if (config.verbose) {
-                std::cout << "  Iteration " << (iter + 1) << std::endl;
+                LOG_DEBUG(logger, "  Iteration {}", (iter + 1));
             }
 
             // Calculate mismatches
@@ -56,7 +59,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             if (max_mismatch < config.tolerance) {
                 result.converged = true;
                 result.iterations = iter + 1;
-                std::cout << "  Converged in " << (iter + 1) << " iterations" << std::endl;
+                LOG_INFO(logger, "  Converged in {} iterations", (iter + 1));
                 break;
             }
 
@@ -73,8 +76,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         }
 
         if (!result.converged) {
-            std::cout << "  Failed to converge after " << config.max_iterations << " iterations"
-                      << std::endl;
+            LOG_WARN(logger, "  Failed to converge after {} iterations", config.max_iterations);
             result.iterations = config.max_iterations;
         }
 
@@ -83,7 +85,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
 
     void set_lu_solver(std::shared_ptr<ILUSolver> lu_solver) override {
         lu_solver_ = lu_solver;
-        std::cout << "CPUNewtonRaphson: LU solver backend set" << std::endl;
+        LOG_DEBUG(logger, "CPUNewtonRaphson: LU solver backend set");
     }
 
     std::vector<double> calculate_mismatches(const NetworkData& network_data,
@@ -91,7 +93,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                                              const SparseMatrix& /*admittance_matrix*/
                                              ) override {
         // TODO: Implement full mismatch calculation with S = V * conj(Y * V)
-        std::cout << "CPUNewtonRaphson: Calculating power mismatches" << std::endl;
+        LOG_TRACE(logger, "CPUNewtonRaphson: Calculating power mismatches");
 
         std::vector<double> mismatches;
         static int iter_count = 0;  // Static counter to simulate convergence

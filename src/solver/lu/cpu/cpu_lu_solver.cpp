@@ -74,7 +74,7 @@ class CPULUSolver : public ILUSolver {
         }
 
         if (matrix.nnz <= 0 || matrix.values.empty()) {
-            std::cerr << "Error: Matrix has no non-zero elements" << std::endl;
+            logger.logError("Matrix has no non-zero elements");
             return false;
         }
 
@@ -82,19 +82,19 @@ class CPULUSolver : public ILUSolver {
 
         // Phase 1: Symbolic Analysis
         if (!perform_symbolic_analysis(matrix)) {
-            std::cerr << "Error: Symbolic analysis failed" << std::endl;
+            logger.logError("Symbolic analysis failed");
             return false;
         }
 
         // Phase 2: Numerical Factorization
         if (!perform_numerical_factorization(matrix)) {
-            std::cerr << "Error: Numerical factorization failed" << std::endl;
+            logger.logError("Numerical factorization failed");
             return false;
         }
 
         factorized_ = true;
-        std::cout << "  Three-phase factorization completed successfully" << std::endl;
-        std::cout << "  L nnz: " << symbolic_.l_nnz << ", U nnz: " << symbolic_.u_nnz << std::endl;
+        LOG_INFO(logger, "  Three-phase factorization completed successfully");
+        LOG_INFO(logger, "  L nnz:", symbolic_.l_nnz, ", U nnz:", symbolic_.u_nnz);
 
         return true;
     }
@@ -111,8 +111,10 @@ class CPULUSolver : public ILUSolver {
             throw std::runtime_error("RHS size does not match matrix dimension");
         }
 
-        std::cout << "CPULUSolver: Solving with forward/backward substitution" << std::endl;
-        std::cout << "  RHS size: " << rhs.size() << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("CPULUSolver");
+        LOG_INFO(logger, "Solving with forward/backward substitution");
+        LOG_DEBUG(logger, "  RHS size:", rhs.size());
 
         // Phase 3: Solve system PAQ x = b
         // Step 1: Apply row permutation -> b' = P * b
@@ -134,7 +136,9 @@ class CPULUSolver : public ILUSolver {
      * @brief Update existing factorization (for now, performs full refactorization)
      */
     bool update_factorization(const SparseMatrix& matrix) override {
-        std::cout << "CPULUSolver: Updating factorization" << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("CPULUSolver");
+        LOG_INFO(logger, "Updating factorization");
 
         // For now, perform full refactorization
         // Future optimization: implement efficient update for modified matrices
@@ -151,17 +155,19 @@ class CPULUSolver : public ILUSolver {
      * Analyze sparsity pattern and predict fill-in locations
      */
     bool perform_symbolic_analysis(const SparseMatrix& matrix) {
-        std::cout << "  Phase 1: Symbolic analysis..." << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("CPULUSolver");
+        LOG_INFO(logger, "  Phase 1: Symbolic analysis...");
 
         // Validate CSR format
         if (matrix.row_ptr.size() != static_cast<size_t>(matrix_size_ + 1)) {
-            std::cerr << "Error: Invalid row_ptr size" << std::endl;
+            logger.logError("Invalid row_ptr size");
             return false;
         }
 
         if (matrix.col_idx.size() != static_cast<size_t>(matrix.nnz) ||
             matrix.values.size() != static_cast<size_t>(matrix.nnz)) {
-            std::cerr << "Error: Inconsistent matrix data sizes" << std::endl;
+            logger.logError("Inconsistent matrix data sizes");
             return false;
         }
 
@@ -264,9 +270,8 @@ class CPULUSolver : public ILUSolver {
         symbolic_.valid = true;
 
         double fill_ratio = static_cast<double>(symbolic_.l_nnz + symbolic_.u_nnz) / matrix.nnz;
-        std::cout << "    L nnz: " << symbolic_.l_nnz << ", U nnz: " << symbolic_.u_nnz
-                  << std::endl;
-        std::cout << "    Fill ratio: " << fill_ratio << "x" << std::endl;
+        LOG_DEBUG(logger, "    L nnz:", symbolic_.l_nnz, ", U nnz:", symbolic_.u_nnz);
+        LOG_DEBUG(logger, "    Fill ratio:", fill_ratio, "x");
 
         return true;
     }
@@ -276,10 +281,12 @@ class CPULUSolver : public ILUSolver {
      * Perform sparse Gaussian elimination with threshold pivoting
      */
     bool perform_numerical_factorization(const SparseMatrix& matrix) {
-        std::cout << "  Phase 2: Numerical factorization..." << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("CPULUSolver");
+        LOG_INFO(logger, "  Phase 2: Numerical factorization...");
 
         if (!symbolic_.valid) {
-            std::cerr << "Error: Symbolic analysis must be completed first" << std::endl;
+            logger.logError("Symbolic analysis must be completed first");
             return false;
         }
 
@@ -298,8 +305,8 @@ class CPULUSolver : public ILUSolver {
 
         // Only use dense approach for matrices that fit reasonably in memory
         if (matrix_size_ > 1000) {
-            std::cerr << "Error: Matrix too large for current implementation (size=" << matrix_size_
-                      << ")" << std::endl;
+            logger.logError("Matrix too large for current implementation (size=" +
+                            std::to_string(matrix_size_) + ")");
             return false;
         }
 
@@ -343,8 +350,9 @@ class CPULUSolver : public ILUSolver {
 
             // Check for singularity
             if (std::abs(dense_work[pivot_row][k]) < pivot_tolerance_) {
-                std::cerr << "Error: Matrix is numerically singular at step " << k << " (pivot "
-                          << std::abs(dense_work[pivot_row][k]) << ")" << std::endl;
+                logger.logError("Matrix is numerically singular at step " + std::to_string(k) +
+                                " (pivot " + std::to_string(std::abs(dense_work[pivot_row][k])) +
+                                ")");
                 return false;
             }
 
@@ -424,11 +432,11 @@ class CPULUSolver : public ILUSolver {
             if (std::abs(val) > drop_tolerance_) actual_u_nnz++;
         }
 
-        std::cout << "    Pivot tolerance: " << pivot_tolerance_ << std::endl;
-        std::cout << "    Drop tolerance: " << drop_tolerance_ << std::endl;
-        std::cout << "    Growth factor limit: " << growth_factor_limit_ << std::endl;
-        std::cout << "    Actual L nnz: " << actual_l_nnz << "/" << symbolic_.l_nnz << std::endl;
-        std::cout << "    Actual U nnz: " << actual_u_nnz << "/" << symbolic_.u_nnz << std::endl;
+        LOG_DEBUG(logger, "    Pivot tolerance:", pivot_tolerance_);
+        LOG_DEBUG(logger, "    Drop tolerance:", drop_tolerance_);
+        LOG_DEBUG(logger, "    Growth factor limit:", growth_factor_limit_);
+        LOG_DEBUG(logger, "    Actual L nnz:", actual_l_nnz, "/", symbolic_.l_nnz);
+        LOG_DEBUG(logger, "    Actual U nnz:", actual_u_nnz, "/", symbolic_.u_nnz);
 
         return true;
     }

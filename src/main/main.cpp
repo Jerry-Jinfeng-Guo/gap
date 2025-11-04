@@ -5,6 +5,7 @@
 
 #include "gap/core/backend_factory.h"
 #include "gap/core/types.h"
+#include "gap/logging/logger.h"
 
 using namespace gap;
 
@@ -117,23 +118,25 @@ AppConfig parse_arguments(int argc, char* argv[]) {
  * @brief Main power flow calculation function
  */
 int run_power_flow(const AppConfig& config) {
+    auto& logger = gap::logging::global_logger;
+    logger.setComponent("GAP");
+
     try {
         // Check if requested backend is available
         if (!core::BackendFactory::is_backend_available(config.backend_type)) {
-            std::cerr << "Requested backend is not available" << std::endl;
+            LOG_ERROR(logger, "Requested backend is not available");
             return 1;
         }
 
         if (config.verbose) {
-            std::cout << "GAP Power Flow Calculator\n" << std::endl;
-            std::cout << "Configuration:" << std::endl;
-            std::cout << "  Input file: " << config.input_file << std::endl;
-            std::cout << "  Output file: " << config.output_file << std::endl;
-            std::cout << "  Backend: " << (config.backend_type == BackendType::CPU ? "CPU" : "GPU")
-                      << std::endl;
-            std::cout << "  Tolerance: " << config.pf_config.tolerance << std::endl;
-            std::cout << "  Max iterations: " << config.pf_config.max_iterations << std::endl;
-            std::cout << std::endl;
+            LOG_INFO(logger, "GAP Power Flow Calculator");
+            LOG_INFO(logger, "Configuration:");
+            LOG_INFO(logger, "  Input file: {}", config.input_file);
+            LOG_INFO(logger, "  Output file: {}", config.output_file);
+            LOG_INFO(logger, "  Backend: {}",
+                     (config.backend_type == BackendType::CPU ? "CPU" : "GPU"));
+            LOG_INFO(logger, "  Tolerance: {}", config.pf_config.tolerance);
+            LOG_INFO(logger, "  Max iterations: {}", config.pf_config.max_iterations);
         }
 
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -148,13 +151,13 @@ int run_power_flow(const AppConfig& config) {
 
         // Read network data
         if (config.verbose) {
-            std::cout << "Reading network data..." << std::endl;
+            LOG_INFO(logger, "Reading network data...");
         }
         auto network_data = io_module->read_network_data(config.input_file);
 
         // Build admittance matrix
         if (config.verbose) {
-            std::cout << "Building admittance matrix..." << std::endl;
+            LOG_INFO(logger, "Building admittance matrix...");
         }
         auto admittance_matrix = admittance_backend->build_admittance_matrix(network_data);
 
@@ -163,14 +166,14 @@ int run_power_flow(const AppConfig& config) {
 
         // Solve power flow
         if (config.verbose) {
-            std::cout << "Solving power flow..." << std::endl;
+            LOG_INFO(logger, "Solving power flow...");
         }
         auto result =
             powerflow_solver->solve_power_flow(network_data, *admittance_matrix, config.pf_config);
 
         // Write results
         if (config.verbose) {
-            std::cout << "Writing results..." << std::endl;
+            LOG_INFO(logger, "Writing results...");
         }
         io_module->write_results(config.output_file, result.bus_voltages, result.converged,
                                  result.iterations);
@@ -194,7 +197,7 @@ int run_power_flow(const AppConfig& config) {
         return result.converged ? 0 : 1;
 
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        LOG_ERROR(logger, "Error: {}", e.what());
         return 1;
     }
 }

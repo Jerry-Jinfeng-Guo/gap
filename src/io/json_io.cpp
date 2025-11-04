@@ -8,6 +8,7 @@
 #include <unordered_set>
 
 #include "gap/io/io_interface.h"
+#include "gap/logging/logger.h"
 
 // Simple JSON parser (basic implementation for PGM format)
 // In production, would use nlohmann/json or similar library
@@ -373,9 +374,13 @@ void inferBusTypes(NetworkData& network) {
 }
 
 class JsonIOModule : public IIOModule {
+  private:
+    gap::logging::Logger& logger = gap::logging::global_logger;
+
   public:
     NetworkData read_network_data(const std::string& filename) override {
-        std::cout << "JsonIOModule: Reading PGM network data from " << filename << std::endl;
+        logger.setComponent("JsonIOModule");
+        LOG_INFO(logger, "Reading PGM network data from {}", filename);
 
         // Read file content
         std::ifstream file(filename);
@@ -482,12 +487,11 @@ class JsonIOModule : public IIOModule {
 
         // Validate PGM compliance
         if (!network.validate_pgm_compliance()) {
-            std::cerr << "Warning: Network data does not meet PGM compliance standards"
-                      << std::endl;
+            LOG_WARN(logger, "Network data does not meet PGM compliance standards");
         }
 
-        std::cout << "  Loaded " << network.num_buses << " buses, " << network.num_branches
-                  << " branches, " << network.num_appliances << " appliances" << std::endl;
+        LOG_INFO(logger, "  Loaded {} buses, {} branches, {} appliances", network.num_buses,
+                 network.num_branches, network.num_appliances);
 
         return network;
     }
@@ -495,10 +499,10 @@ class JsonIOModule : public IIOModule {
     void write_results(const std::string& filename, const ComplexVector& bus_voltages,
                        bool converged, int iterations) override {
         // TODO: Implement JSON output for results
-        std::cout << "JsonIOModule: Writing results to " << filename << std::endl;
-        std::cout << "  Converged: " << (converged ? "Yes" : "No") << std::endl;
-        std::cout << "  Iterations: " << iterations << std::endl;
-        std::cout << "  Bus voltages count: " << bus_voltages.size() << std::endl;
+        LOG_INFO(logger, "Writing results to {}", filename);
+        LOG_INFO(logger, "  Converged: {}", (converged ? "Yes" : "No"));
+        LOG_INFO(logger, "  Iterations: {}", iterations);
+        LOG_INFO(logger, "  Bus voltages count: {}", bus_voltages.size());
 
         // Placeholder implementation
         // In real implementation, format and write JSON output
@@ -506,11 +510,11 @@ class JsonIOModule : public IIOModule {
 
     bool validate_input_format(const std::string& filename) override {
         // TODO: Implement JSON format validation
-        std::cout << "JsonIOModule: Validating format of " << filename << std::endl;
+        LOG_INFO(logger, "Validating format of {}", filename);
 
         std::ifstream file(filename);
         if (!file.is_open()) {
-            std::cerr << "Cannot open file: " << filename << std::endl;
+            LOG_ERROR(logger, "Cannot open file: {}", filename);
             return false;
         }
 

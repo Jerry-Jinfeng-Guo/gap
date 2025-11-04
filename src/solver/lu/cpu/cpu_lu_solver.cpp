@@ -223,12 +223,12 @@ class CPULUSolver : public ILUSolver {
 
                         if (add_to_l) {
                             // Only add if it creates a meaningful structural connection
-                            if (l_pattern[i].size() < matrix_size_ / 2) {  // Limit fill-in
+                            if (l_pattern[i].size() < static_cast<size_t>(matrix_size_) / 2) {
                                 l_pattern[i].insert(col);
                             }
                         }
                         if (add_to_u) {
-                            if (u_pattern[i].size() < matrix_size_ / 2) {  // Limit fill-in
+                            if (u_pattern[i].size() < static_cast<size_t>(matrix_size_) / 2) {
                                 u_pattern[i].insert(col);
                             }
                         }

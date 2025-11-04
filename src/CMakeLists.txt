@@ -8,6 +8,11 @@ target_include_directories(gap_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include
 )
 
+# Enable Position Independent Code for linking into shared libraries
+set_target_properties(gap_core PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+)
+
 # Link CUDA libraries to gap_core if CUDA is enabled
 if(GAP_ENABLE_CUDA)
     target_link_libraries(gap_core

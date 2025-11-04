@@ -30,7 +30,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
 
         // Process shunt appliances (capacitors, reactors) first
         // Use actual appliances vector size rather than potentially uninitialized num_appliances
-        for (const auto& appliance : network_data.appliances) {
+        for (auto const& appliance : network_data.appliances) {
             if (appliance.type == ApplianceType::SHUNT) {
                 int bus_idx = appliance.node - 1;  // Convert to 0-based indexing
                 if (bus_idx >= 0 && bus_idx < network_data.num_buses) {
@@ -41,7 +41,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         }
 
         // Iterate over all branches to build admittance matrix
-        for (const auto& branch : network_data.branches) {
+        for (auto const& branch : network_data.branches) {
             if (!branch.status) {
                 continue;  // Skip out-of-service branches
             }
@@ -99,7 +99,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
             row_elements.emplace_back(i, diagonal_elements[i]);
 
             // Add off-diagonal elements
-            for (const auto& [col, value] : off_diagonal_elements[i]) {
+            for (auto const& [col, value] : off_diagonal_elements[i]) {
                 row_elements.emplace_back(col, value);
             }
 
@@ -110,7 +110,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
                       });
 
             // Add sorted elements to CSR arrays
-            for (const auto& [col, value] : row_elements) {
+            for (auto const& [col, value] : row_elements) {
                 matrix->col_idx.push_back(col);
                 matrix->values.push_back(value);
                 nnz++;
@@ -135,7 +135,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         auto updated_matrix = std::make_unique<SparseMatrix>(matrix);
 
         // Iterate over each branch change to update the matrix
-        for (const auto& branch_change : branch_changes) {
+        for (auto const& branch_change : branch_changes) {
             int from_bus = branch_change.from_bus - 1;  // Convert to 0-based indexing
             int to_bus = branch_change.to_bus - 1;      // Convert to 0-based indexing
 

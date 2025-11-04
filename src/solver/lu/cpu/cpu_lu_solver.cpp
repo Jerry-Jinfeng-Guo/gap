@@ -425,10 +425,10 @@ class CPULUSolver : public ILUSolver {
 
         // Calculate actual non-zeros after dropping small elements
         int actual_l_nnz = 0, actual_u_nnz = 0;
-        for (const auto& val : numerical_.l_values) {
+        for (auto const& val : numerical_.l_values) {
             if (std::abs(val) > drop_tolerance_) actual_l_nnz++;
         }
-        for (const auto& val : numerical_.u_values) {
+        for (auto const& val : numerical_.u_values) {
             if (std::abs(val) > drop_tolerance_) actual_u_nnz++;
         }
 

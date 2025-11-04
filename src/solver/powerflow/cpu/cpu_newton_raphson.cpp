@@ -41,7 +41,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         // Newton-Raphson iterations
         for (int iter = 0; iter < config.max_iterations; ++iter) {
             if (config.verbose) {
-                LOG_DEBUG(logger, "  Iteration {}", (iter + 1));
+                LOG_DEBUG(logger, "  Iteration", (iter + 1));
             }
 
             // Calculate mismatches
@@ -59,7 +59,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             if (max_mismatch < config.tolerance) {
                 result.converged = true;
                 result.iterations = iter + 1;
-                LOG_INFO(logger, "  Converged in {} iterations", (iter + 1));
+                LOG_INFO(logger, "  Converged in", (iter + 1), "iterations");
                 break;
             }
 
@@ -76,7 +76,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         }
 
         if (!result.converged) {
-            LOG_WARN(logger, "  Failed to converge after {} iterations", config.max_iterations);
+            LOG_WARN(logger, "  Failed to converge after", config.max_iterations, "iterations");
             result.iterations = config.max_iterations;
         }
 

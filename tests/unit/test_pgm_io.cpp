@@ -47,7 +47,7 @@ std::string find_data_file(const std::string& relative_path) {
     }
 
     // Try each candidate path
-    for (const auto& candidate : candidates) {
+    for (auto const& candidate : candidates) {
         if (std::filesystem::exists(candidate)) {
             return candidate;
         }
@@ -88,7 +88,7 @@ void test_pgm_json_io() {
 
         // Verify bus data
         std::cout << "\nBus details:" << std::endl;
-        for (const auto& bus : network.buses) {
+        for (auto const& bus : network.buses) {
             std::cout << "  Bus " << bus.id << ": u_rated=" << bus.u_rated
                       << "V, type=" << static_cast<int>(bus.bus_type) << std::endl;
             ASSERT_NEAR(400.0, bus.u_rated, 1e-6);  // All nodes have u_rated=400V
@@ -96,7 +96,7 @@ void test_pgm_json_io() {
 
         // Verify branch data
         std::cout << "\nBranch details:" << std::endl;
-        for (const auto& branch : network.branches) {
+        for (auto const& branch : network.branches) {
             std::cout << "  Branch " << branch.id << ": " << branch.from_bus << "->"
                       << branch.to_bus << ", r1=" << branch.r1 << ", x1=" << branch.x1
                       << ", i_n=" << branch.i_n << std::endl;
@@ -107,7 +107,7 @@ void test_pgm_json_io() {
 
         // Verify appliance data
         std::cout << "\nAppliance details:" << std::endl;
-        for (const auto& appliance : network.appliances) {
+        for (auto const& appliance : network.appliances) {
             std::cout << "  Appliance " << appliance.id << " at bus " << appliance.node
                       << ", type=" << static_cast<int>(appliance.type);
             if (appliance.type == ApplianceType::SOURCE) {
@@ -121,7 +121,7 @@ void test_pgm_json_io() {
 
         // Verify bus types were correctly inferred
         bool found_slack = false;
-        for (const auto& bus : network.buses) {
+        for (auto const& bus : network.buses) {
             if (bus.bus_type == BusType::SLACK) {
                 found_slack = true;
                 ASSERT_EQ(1, bus.id);  // Bus 1 should be slack (has source)
@@ -162,13 +162,13 @@ void test_transformer_network() {
 
         // Verify bus voltage ratings (different for transformer network)
         std::cout << "\nTransformer bus details:" << std::endl;
-        for (const auto& bus : network.buses) {
+        for (auto const& bus : network.buses) {
             std::cout << "  Bus " << bus.id << ": u_rated=" << bus.u_rated << "V" << std::endl;
         }
 
         // Check that we have the expected voltage levels
         bool found_10kv = false, found_400v = false;
-        for (const auto& bus : network.buses) {
+        for (auto const& bus : network.buses) {
             if (std::abs(bus.u_rated - 10000.0) < 1e-6) found_10kv = true;
             if (std::abs(bus.u_rated - 400.0) < 1e-6) found_400v = true;
         }
@@ -176,7 +176,7 @@ void test_transformer_network() {
 
         // Verify transformer branch data
         std::cout << "\nTransformer branch details:" << std::endl;
-        const auto& transformer = network.branches[0];
+        auto const& transformer = network.branches[0];
         std::cout << "  Transformer " << transformer.id << ": " << transformer.from_bus << "->"
                   << transformer.to_bus << std::endl;
         std::cout << "    r1=" << transformer.r1 << ", x1=" << transformer.x1 << std::endl;
@@ -191,7 +191,7 @@ void test_transformer_network() {
         ASSERT_TRUE(transformer.i_n > 0.0);  // Should have rated current from sn/u_rated
 
         // Verify appliance (source) data
-        const auto& source = network.appliances[0];
+        auto const& source = network.appliances[0];
         ASSERT_TRUE(source.type == ApplianceType::SOURCE);
         ASSERT_NEAR(1.0, source.u_ref, 1e-6);  // Reference voltage
 
@@ -225,13 +225,13 @@ void test_generic_branch_network() {
 
         // Verify bus voltage ratings
         std::cout << "\nGeneric branch bus details:" << std::endl;
-        for (const auto& bus : network.buses) {
+        for (auto const& bus : network.buses) {
             std::cout << "  Bus " << bus.id << ": u_rated=" << bus.u_rated << "V" << std::endl;
         }
 
         // Check high voltage levels (380kV and 400kV)
         bool found_380kv = false, found_400kv = false;
-        for (const auto& bus : network.buses) {
+        for (auto const& bus : network.buses) {
             if (std::abs(bus.u_rated - 380000.0) < 1e-6) found_380kv = true;
             if (std::abs(bus.u_rated - 400000.0) < 1e-6) found_400kv = true;
         }
@@ -239,7 +239,7 @@ void test_generic_branch_network() {
 
         // Verify generic branch data with direct PGM parameters
         std::cout << "\nGeneric branch details:" << std::endl;
-        const auto& branch = network.branches[0];
+        auto const& branch = network.branches[0];
         std::cout << "  Branch " << branch.id << ": " << branch.from_bus << "->" << branch.to_bus
                   << std::endl;
         std::cout << "    r1=" << branch.r1 << ", x1=" << branch.x1 << std::endl;
@@ -261,7 +261,7 @@ void test_generic_branch_network() {
         // Verify appliances (source + load)
         std::cout << "\nAppliances in generic branch network:" << std::endl;
         bool found_source = false, found_load = false;
-        for (const auto& appliance : network.appliances) {
+        for (auto const& appliance : network.appliances) {
             std::cout << "  " << (appliance.type == ApplianceType::SOURCE ? "Source" : "Load")
                       << " " << appliance.id << " at bus " << appliance.node << std::endl;
             if (appliance.type == ApplianceType::SOURCE) {

@@ -88,7 +88,7 @@ void test_gpu_powerflow_convergence() {
     ASSERT_TRUE(result.iterations <= config.max_iterations);
 
     // Check that voltage magnitudes are reasonable
-    for (const auto& voltage : result.bus_voltages) {
+    for (auto const& voltage : result.bus_voltages) {
         double magnitude = std::abs(voltage);
         ASSERT_TRUE(magnitude > 0.5);  // Not too low
         ASSERT_TRUE(magnitude < 2.0);  // Not too high

@@ -131,12 +131,12 @@ int run_power_flow(AppConfig const& config) {
         if (config.verbose) {
             LOG_INFO(logger, "GAP Power Flow Calculator");
             LOG_INFO(logger, "Configuration:");
-            LOG_INFO(logger, "  Input file: {}", config.input_file);
-            LOG_INFO(logger, "  Output file: {}", config.output_file);
-            LOG_INFO(logger, "  Backend: {}",
-                     (config.backend_type == BackendType::CPU ? "CPU" : "GPU"));
-            LOG_INFO(logger, "  Tolerance: {}", config.pf_config.tolerance);
-            LOG_INFO(logger, "  Max iterations: {}", config.pf_config.max_iterations);
+            LOG_INFO(logger, "  Input file:", config.input_file);
+            LOG_INFO(logger, "  Output file:", config.output_file);
+            LOG_INFO(logger,
+                     "  Backend:", (config.backend_type == BackendType::CPU ? "CPU" : "GPU"));
+            LOG_INFO(logger, "  Tolerance:", config.pf_config.tolerance);
+            LOG_INFO(logger, "  Max iterations:", config.pf_config.max_iterations);
         }
 
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -197,7 +197,7 @@ int run_power_flow(AppConfig const& config) {
         return result.converged ? 0 : 1;
 
     } catch (std::exception const& e) {
-        LOG_ERROR(logger, "Error: {}", e.what());
+        LOG_ERROR(logger, "Error:", e.what());
         return 1;
     }
 }

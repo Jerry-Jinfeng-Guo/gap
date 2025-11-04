@@ -380,7 +380,7 @@ class JsonIOModule : public IIOModule {
   public:
     NetworkData read_network_data(const std::string& filename) override {
         logger.setComponent("JsonIOModule");
-        LOG_INFO(logger, "Reading PGM network data from {}", filename);
+        LOG_INFO(logger, "Reading PGM network data from", filename);
 
         // Read file content
         std::ifstream file(filename);
@@ -490,8 +490,8 @@ class JsonIOModule : public IIOModule {
             LOG_WARN(logger, "Network data does not meet PGM compliance standards");
         }
 
-        LOG_INFO(logger, "  Loaded {} buses, {} branches, {} appliances", network.num_buses,
-                 network.num_branches, network.num_appliances);
+        LOG_INFO(logger, "  Loaded", network.num_buses, "buses,", network.num_branches, "branches,",
+                 network.appliances.size(), "appliances");
 
         return network;
     }
@@ -499,10 +499,10 @@ class JsonIOModule : public IIOModule {
     void write_results(const std::string& filename, const ComplexVector& bus_voltages,
                        bool converged, int iterations) override {
         // TODO: Implement JSON output for results
-        LOG_INFO(logger, "Writing results to {}", filename);
-        LOG_INFO(logger, "  Converged: {}", (converged ? "Yes" : "No"));
-        LOG_INFO(logger, "  Iterations: {}", iterations);
-        LOG_INFO(logger, "  Bus voltages count: {}", bus_voltages.size());
+        LOG_INFO(logger, "Writing results to", filename);
+        LOG_INFO(logger, "  Converged:", (converged ? "Yes" : "No"));
+        LOG_INFO(logger, "  Iterations:", iterations);
+        LOG_INFO(logger, "  Bus voltages count:", bus_voltages.size());
 
         // Placeholder implementation
         // In real implementation, format and write JSON output
@@ -510,11 +510,11 @@ class JsonIOModule : public IIOModule {
 
     bool validate_input_format(const std::string& filename) override {
         // TODO: Implement JSON format validation
-        LOG_INFO(logger, "Validating format of {}", filename);
+        LOG_INFO(logger, "Validating format of", filename);
 
         std::ifstream file(filename);
         if (!file.is_open()) {
-            LOG_ERROR(logger, "Cannot open file: {}", filename);
+            LOG_ERROR(logger, "Cannot open file:", filename);
             return false;
         }
 

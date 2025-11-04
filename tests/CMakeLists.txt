@@ -5,6 +5,7 @@ add_executable(gap_unit_tests
     unit/test_admittance.cpp
     unit/test_lu_solver.cpp
     unit/test_powerflow.cpp
+    unit/test_newton_raphson_functions.cpp
     unit/test_pgm_io.cpp
 )
 

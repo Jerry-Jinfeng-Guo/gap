@@ -119,13 +119,14 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             // Get specified power from appliances connected to this bus
             auto specified_power = get_specified_power_at_bus(network_data, i);
 
-            // P mismatch: ΔP_i = P_specified - P_calculated
-            double p_mismatch = specified_power.real() - calculated_powers[i].real();
+            // P mismatch: ΔP_i = P_calculated - P_specified (Newton-Raphson standard convention)
+            double p_mismatch = calculated_powers[i].real() - specified_power.real();
             mismatches.push_back(p_mismatch);
 
             if (network_data.buses[i].bus_type == BusType::PQ) {
-                // Q mismatch: ΔQ_i = Q_specified - Q_calculated
-                double q_mismatch = specified_power.imag() - calculated_powers[i].imag();
+                // Q mismatch: ΔQ_i = Q_calculated - Q_specified (Newton-Raphson standard
+                // convention)
+                double q_mismatch = calculated_powers[i].imag() - specified_power.imag();
                 mismatches.push_back(q_mismatch);
             }
             // PV buses: only P equation, Q is free variable within limits

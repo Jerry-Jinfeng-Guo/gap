@@ -354,9 +354,6 @@ void test_lu_solver_scalability() {
     std::vector<double> solve_times;
     std::vector<double> solution_errors;
 
-    std::cout << "  Size\tnnz\tSparsity\tFactorize(ms)\tSolve(μs)\tError" << std::endl;
-    std::cout << "  ----\t---\t--------\t------------\t---------\t-----" << std::endl;
-
     for (int size : test_sizes) {
         SparseMatrix matrix = generate_power_system_matrix(size, 0.02);  // 2% sparsity
         auto [known_solution, rhs_placeholder] = generate_known_solution(size);
@@ -385,6 +382,9 @@ void test_lu_solver_scalability() {
         auto solve_duration = duration_cast<microseconds>(solve_end - factorize_time);
 
         double sparsity = (100.0 * matrix.nnz) / (size * size);
+
+        std::cout << "  Size\tnnz\tSparsity\tFactorize(ms)\tSolve(μs)\tError\n";
+        std::cout << "  ----\t---\t--------\t------------\t---------\t-----\n";
 
         std::cout << "  " << size << "\t" << matrix.nnz << "\t" << std::fixed
                   << std::setprecision(2) << sparsity << "%\t\t" << factorize_duration.count()

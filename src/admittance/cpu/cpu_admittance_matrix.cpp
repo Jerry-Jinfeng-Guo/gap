@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "gap/admittance/admittance_interface.h"
+#include "gap/logging/logger.h"
 
 namespace gap::admittance {
 
@@ -11,10 +12,12 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
   public:
     std::unique_ptr<SparseMatrix> build_admittance_matrix(
         const NetworkData& network_data) override {
-        std::cout << "CPUAdmittanceMatrix: Building admittance matrix" << std::endl;
-        std::cout << "  Number of buses: " << network_data.num_buses << std::endl;
-        std::cout << "  Number of branches: " << network_data.num_branches << std::endl;
-        std::cout << "  Number of appliances: " << network_data.appliances.size() << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("CPUAdmittanceMatrix");
+        LOG_INFO(logger, "Building admittance matrix");
+        LOG_INFO(logger, "  Number of buses:", network_data.num_buses);
+        LOG_INFO(logger, "  Number of branches:", network_data.num_branches);
+        LOG_INFO(logger, "  Number of appliances:", network_data.appliances.size());
 
         auto matrix = std::make_unique<SparseMatrix>();
         matrix->num_rows = network_data.num_buses;
@@ -118,15 +121,16 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
 
         matrix->nnz = nnz;
 
-        std::cout << "  Matrix constructed with " << matrix->nnz << " non-zero elements"
-                  << std::endl;
+        LOG_INFO(logger, "  Matrix constructed with", matrix->nnz, "non-zero elements");
         return matrix;
     }
 
     std::unique_ptr<SparseMatrix> update_admittance_matrix(
         const SparseMatrix& matrix, const std::vector<BranchData>& branch_changes) override {
-        std::cout << "CPUAdmittanceMatrix: Updating admittance matrix" << std::endl;
-        std::cout << "  Branch changes: " << branch_changes.size() << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("CPUAdmittanceMatrix");
+        LOG_INFO(logger, "Updating admittance matrix");
+        LOG_INFO(logger, "  Branch changes:", branch_changes.size());
 
         auto updated_matrix = std::make_unique<SparseMatrix>(matrix);
 
@@ -135,10 +139,9 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
             int from_bus = branch_change.from_bus - 1;  // Convert to 0-based indexing
             int to_bus = branch_change.to_bus - 1;      // Convert to 0-based indexing
 
-            std::cout << "  Updating branch " << branch_change.from_bus << " -> "
-                      << branch_change.to_bus
-                      << " (status: " << (branch_change.status ? "in-service" : "out-of-service")
-                      << ")" << std::endl;
+            LOG_DEBUG(logger, "  Updating branch", branch_change.from_bus, "->",
+                      branch_change.to_bus,
+                      "(status:", (branch_change.status ? "in-service" : "out-of-service"), ")");
 
             // Calculate branch admittance change using new r1, x1, g1, b1 parameters
             Complex series_admittance_change = Complex(0.0, 0.0);
@@ -188,7 +191,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
             }
         }
 
-        std::cout << "  Matrix update completed" << std::endl;
+        LOG_INFO(logger, "  Matrix update completed");
         return updated_matrix;
     }
 

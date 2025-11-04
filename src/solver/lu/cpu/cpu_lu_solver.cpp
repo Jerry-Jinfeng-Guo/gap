@@ -6,6 +6,7 @@
 #include <numeric>
 #include <set>
 
+#include "gap/logging/logger.h"
 #include "gap/solver/lu_solver_interface.h"
 
 namespace gap::solver {
@@ -59,13 +60,16 @@ class CPULUSolver : public ILUSolver {
      * @brief Perform complete LU factorization in three phases
      */
     bool factorize(const SparseMatrix& matrix) override {
-        std::cout << "CPULUSolver: Starting three-phase factorization" << std::endl;
-        std::cout << "  Matrix size: " << matrix.num_rows << "x" << matrix.num_cols << std::endl;
-        std::cout << "  Non-zeros: " << matrix.nnz << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("CPULUSolver");
+
+        logger.logInfo("Starting three-phase factorization");
+        LOG_DEBUG(logger, "Matrix size:", matrix.num_rows, "x", matrix.num_cols);
+        LOG_DEBUG(logger, "Non-zeros:", matrix.nnz);
 
         // Validate input matrix
         if (matrix.num_rows != matrix.num_cols) {
-            std::cerr << "Error: Matrix must be square for LU factorization" << std::endl;
+            logger.logError("Matrix must be square for LU factorization");
             return false;
         }
 

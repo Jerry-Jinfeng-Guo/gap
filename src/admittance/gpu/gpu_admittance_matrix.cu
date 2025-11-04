@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "gap/admittance/admittance_interface.h"
+#include "gap/logging/logger.h"
 
 namespace gap::admittance {
 
@@ -50,9 +51,11 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
     std::unique_ptr<SparseMatrix> build_admittance_matrix(
         const NetworkData& network_data) override {
         // TODO: Implement GPU-based admittance matrix construction using CUDA
-        std::cout << "GPUAdmittanceMatrix: Building admittance matrix on GPU" << std::endl;
-        std::cout << "  Number of buses: " << network_data.num_buses << std::endl;
-        std::cout << "  Number of branches: " << network_data.num_branches << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("GPUAdmittanceMatrix");
+        LOG_INFO(logger, "Building admittance matrix on GPU");
+        LOG_INFO(logger, "  Number of buses:", network_data.num_buses);
+        LOG_INFO(logger, "  Number of branches:", network_data.num_branches);
 
         auto matrix = std::make_unique<SparseMatrix>();
         matrix->num_rows = network_data.num_buses;
@@ -68,7 +71,7 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
 
         // Simulate GPU work
         cudaDeviceSynchronize();
-        std::cout << "  GPU admittance matrix construction completed" << std::endl;
+        LOG_INFO(logger, "  GPU admittance matrix construction completed");
 
         return matrix;
     }
@@ -76,8 +79,10 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
     std::unique_ptr<SparseMatrix> update_admittance_matrix(
         const SparseMatrix& matrix, const std::vector<BranchData>& branch_changes) override {
         // TODO: Implement GPU-based incremental admittance matrix update
-        std::cout << "GPUAdmittanceMatrix: Updating admittance matrix on GPU" << std::endl;
-        std::cout << "  Branch changes: " << branch_changes.size() << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("GPUAdmittanceMatrix");
+        LOG_INFO(logger, "Updating admittance matrix on GPU");
+        LOG_INFO(logger, "  Branch changes:", branch_changes.size());
 
         auto updated_matrix = std::make_unique<SparseMatrix>(matrix);
 
@@ -88,7 +93,7 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
         // 3. Use cuSPARSE for efficient sparse matrix operations
 
         cudaDeviceSynchronize();
-        std::cout << "  GPU admittance matrix update completed" << std::endl;
+        LOG_INFO(logger, "  GPU admittance matrix update completed");
 
         return updated_matrix;
     }

@@ -1,6 +1,7 @@
 # Core library (interfaces and abstractions)
 add_library(gap_core STATIC
     core/backend_factory.cpp
+    logging/logger.cpp
 )
 
 target_include_directories(gap_core PUBLIC

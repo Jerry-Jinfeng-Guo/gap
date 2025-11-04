@@ -89,36 +89,109 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     }
 
     std::vector<double> calculate_mismatches(NetworkData const& network_data,
-                                             ComplexVector const& /*bus_voltages*/,
-                                             SparseMatrix const& /*admittance_matrix*/
-                                             ) override {
-        // TODO: Implement full mismatch calculation with S = V * conj(Y * V)
+                                             ComplexVector const& bus_voltages,
+                                             SparseMatrix const& admittance_matrix) override {
         LOG_TRACE(logger, "CPUNewtonRaphson: Calculating power mismatches");
 
         std::vector<double> mismatches;
-        static int iter_count = 0;  // Static counter to simulate convergence
-        iter_count++;
 
-        // Simplified convergence simulation for validation tests
-        // In real implementation, calculate actual power flow mismatches
-        double convergence_factor = std::max(0.0, 0.1 - iter_count * 0.01);
+        // Calculate power injections S_i = V_i * conj(I_i) = V_i * conj(Y_bus * V)
+        auto calculated_powers = calculate_bus_power_injections(bus_voltages, admittance_matrix);
 
+        // Calculate mismatches for each bus equation
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
-            if (network_data.buses[i].bus_type != BusType::SLACK) {  // Not slack bus
-                // Simulate decreasing mismatches over iterations
-                mismatches.push_back(convergence_factor);             // P mismatch
-                if (network_data.buses[i].bus_type == BusType::PQ) {  // PQ bus
-                    mismatches.push_back(convergence_factor * 0.5);   // Q mismatch
-                }
+            if (network_data.buses[i].bus_type == BusType::SLACK) {
+                // Skip slack bus - no power equations
+                continue;
             }
-        }
 
-        // Reset counter when mismatches become small (simulated convergence)
-        if (convergence_factor < 1e-5) {
-            iter_count = 0;
+            // Get specified power from appliances connected to this bus
+            auto specified_power = get_specified_power_at_bus(network_data, i);
+
+            // P mismatch: ΔP_i = P_specified - P_calculated
+            double p_mismatch = specified_power.real() - calculated_powers[i].real();
+            mismatches.push_back(p_mismatch);
+
+            if (network_data.buses[i].bus_type == BusType::PQ) {
+                // Q mismatch: ΔQ_i = Q_specified - Q_calculated
+                double q_mismatch = specified_power.imag() - calculated_powers[i].imag();
+                mismatches.push_back(q_mismatch);
+            }
+            // PV buses: only P equation, Q is free variable within limits
         }
 
         return mismatches;
+    }
+
+  private:
+    /**
+     * @brief Calculate power injections at all buses: S = V * conj(Y * V)
+     */
+    ComplexVector calculate_bus_power_injections(ComplexVector const& voltages,
+                                                 SparseMatrix const& Y_bus) const {
+        ComplexVector powers(voltages.size(), Complex(0.0, 0.0));
+
+        // Check if matrix is properly initialized
+        if (Y_bus.nnz == 0 || Y_bus.row_ptr.empty() || Y_bus.col_idx.empty() ||
+            Y_bus.values.empty()) {
+            LOG_DEBUG(logger, "Empty admittance matrix, returning zero power injections");
+            return powers;
+        }
+
+        // For each bus i: S_i = V_i * conj(Σ(Y_ik * V_k))
+        for (int i = 0; i < static_cast<int>(voltages.size()); ++i) {
+            // Check bounds for row pointer access
+            if (i >= static_cast<int>(Y_bus.row_ptr.size() - 1)) {
+                continue;
+            }
+
+            Complex current_injection(0.0, 0.0);
+
+            // Calculate current injection: I_i = Σ(Y_ik * V_k)
+            for (int idx = Y_bus.row_ptr[i]; idx < Y_bus.row_ptr[i + 1]; ++idx) {
+                // Check bounds for arrays access
+                if (idx >= static_cast<int>(Y_bus.col_idx.size()) ||
+                    idx >= static_cast<int>(Y_bus.values.size())) {
+                    break;
+                }
+
+                int k = Y_bus.col_idx[idx];
+                if (k >= static_cast<int>(voltages.size())) {
+                    continue;
+                }
+
+                current_injection += Y_bus.values[idx] * voltages[k];
+            }
+
+            // Power injection: S_i = V_i * conj(I_i)
+            powers[i] = voltages[i] * std::conj(current_injection);
+        }
+
+        return powers;
+    }
+
+    /**
+     * @brief Get specified power injection at a bus from connected appliances
+     */
+    Complex get_specified_power_at_bus(NetworkData const& network_data, size_t bus_idx) const {
+        Complex specified_power(0.0, 0.0);
+        int bus_id = network_data.buses[bus_idx].id;
+
+        // Sum power from all appliances connected to this bus
+        for (auto const& appliance : network_data.appliances) {
+            if (appliance.node == bus_id && appliance.status == 1) {
+                if (appliance.type == ApplianceType::SOURCE) {
+                    // Sources inject power (positive P means generation)
+                    specified_power += Complex(appliance.p_specified, appliance.q_specified);
+                } else if (appliance.type == ApplianceType::LOADGEN) {
+                    // Loads consume power (negative P means consumption)
+                    specified_power += Complex(appliance.p_specified, appliance.q_specified);
+                }
+                // SHUNT appliances are handled in admittance matrix, not as power injections
+            }
+        }
+
+        return specified_power;
     }
 
     BackendType get_backend_type() const noexcept override { return BackendType::CPU; }

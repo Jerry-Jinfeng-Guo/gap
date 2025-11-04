@@ -24,6 +24,7 @@ target_link_libraries(gap_unit_tests
 add_executable(gap_validation_tests
     validation/validation_main.cpp
     validation/ieee_test_cases.cpp
+    validation/lu_solver_validation.cpp
 )
 
 target_include_directories(gap_validation_tests PUBLIC

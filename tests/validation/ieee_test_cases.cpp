@@ -7,6 +7,9 @@
 
 using namespace gap;
 
+// Forward declaration for LU solver validation tests
+void register_lu_solver_validation_tests(TestRunner& runner);
+
 /**
  * @brief IEEE 14-bus test case validation
  */
@@ -369,4 +372,7 @@ void register_validation_tests(TestRunner& runner) {
     runner.add_test("IEEE 14-bus Test Case", test_ieee14_bus_case);
     runner.add_test("Simple 3-bus Case", test_simple_3bus_case);
     runner.add_test("Backend Comparison", test_backend_comparison);
+
+    // Register LU solver validation tests
+    register_lu_solver_validation_tests(runner);
 }

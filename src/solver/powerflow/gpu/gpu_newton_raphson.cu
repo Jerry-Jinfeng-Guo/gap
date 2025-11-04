@@ -15,7 +15,9 @@ namespace gap::solver {
 
 // Functor for voltage updates in GPU kernels
 struct VoltageUpdateFunctor {
-    __device__ Complex operator()(const Complex& v) const { return v + Complex(0.001, 0.0); }
+    __device__ Complex operator()(Complex const& v) const noexcept {
+        return v + Complex(0.001, 0.0);
+    }
 };
 
 class GPUNewtonRaphson : public IPowerFlowSolver {
@@ -49,9 +51,9 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         }
     }
 
-    PowerFlowResult solve_power_flow(const NetworkData& network_data,
-                                     const SparseMatrix& admittance_matrix,
-                                     const PowerFlowConfig& config) override {
+    PowerFlowResult solve_power_flow(NetworkData const& network_data,
+                                     SparseMatrix const& admittance_matrix,
+                                     PowerFlowConfig const& config) override {
         // TODO: Implement GPU-based Newton-Raphson power flow solver
         std::cout << "GPUNewtonRaphson: Starting power flow solution on GPU" << std::endl;
         std::cout << "  Number of buses: " << network_data.num_buses << std::endl;
@@ -142,8 +144,8 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
     }
 
     std::vector<double> calculate_mismatches(
-        const NetworkData& network_data, [[maybe_unused]] const ComplexVector& bus_voltages,
-        [[maybe_unused]] const SparseMatrix& admittance_matrix) override {
+        NetworkData const& network_data, [[maybe_unused]] ComplexVector const& bus_voltages,
+        [[maybe_unused]] SparseMatrix const& admittance_matrix) override {
         // TODO: Implement GPU-based mismatch calculation using CUDA kernels
         std::cout << "GPUNewtonRaphson: Calculating power mismatches on GPU" << std::endl;
 
@@ -169,7 +171,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         return mismatches;
     }
 
-    BackendType get_backend_type() const override { return BackendType::GPU_CUDA; }
+    BackendType get_backend_type() const noexcept override { return BackendType::GPU_CUDA; }
 };
 
 }  // namespace gap::solver

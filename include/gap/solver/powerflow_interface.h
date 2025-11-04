@@ -43,9 +43,9 @@ class IPowerFlowSolver {
      * @param config Solver configuration
      * @return Power flow solution result
      */
-    virtual PowerFlowResult solve_power_flow(const NetworkData& network_data,
-                                             const SparseMatrix& admittance_matrix,
-                                             const PowerFlowConfig& config = PowerFlowConfig{}) = 0;
+    virtual PowerFlowResult solve_power_flow(NetworkData const& network_data,
+                                             SparseMatrix const& admittance_matrix,
+                                             PowerFlowConfig const& config = PowerFlowConfig{}) = 0;
 
     /**
      * @brief Set LU solver backend
@@ -60,15 +60,15 @@ class IPowerFlowSolver {
      * @param admittance_matrix System admittance matrix
      * @return Vector of power mismatches
      */
-    virtual std::vector<double> calculate_mismatches(const NetworkData& network_data,
-                                                     const ComplexVector& bus_voltages,
-                                                     const SparseMatrix& admittance_matrix) = 0;
+    virtual std::vector<double> calculate_mismatches(NetworkData const& network_data,
+                                                     ComplexVector const& bus_voltages,
+                                                     SparseMatrix const& admittance_matrix) = 0;
 
     /**
      * @brief Get backend type
      * @return Backend execution type
      */
-    virtual BackendType get_backend_type() const = 0;
+    virtual BackendType get_backend_type() const noexcept = 0;
 };
 
 }  // namespace gap::solver

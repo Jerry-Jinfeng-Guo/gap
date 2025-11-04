@@ -63,17 +63,17 @@ class Logger {
     /**
      * @brief Configure the logger
      */
-    void configure(LogLevel level, LogOutput output, const std::string& filename = "");
+    void configure(LogLevel level, LogOutput output, std::string const& filename = "");
 
     /**
      * @brief Set component name for context
      */
-    void setComponent(const std::string& name) { component_name_ = name; }
+    void setComponent(std::string const& name) { component_name_ = name; }
 
     /**
      * @brief Check if a log level is enabled (for zero-cost optimization)
      */
-    inline bool isEnabled(LogLevel level) const {
+    constexpr bool isEnabled(LogLevel level) const noexcept {
         return level >= current_level_ && output_type_ != LogOutput::NONE;
     }
 
@@ -81,7 +81,7 @@ class Logger {
      * @brief Log a message with specific level (inline template to avoid linking issues)
      */
     template <typename... Args>
-    inline void log(LogLevel level, const std::string& format, Args&&... args) {
+    inline void log(LogLevel level, std::string const& format, Args&&... args) {
         if (!isEnabled(level)) return;
 
         std::ostringstream oss;
@@ -99,9 +99,9 @@ class Logger {
     /**
      * @brief Simple log functions for common cases
      */
-    void logInfo(const std::string& message);
-    void logDebug(const std::string& message);
-    void logError(const std::string& message);
+    void logInfo(std::string const& message);
+    void logDebug(std::string const& message);
+    void logError(std::string const& message);
 
     /**
      * @brief Flush any buffered output
@@ -111,7 +111,7 @@ class Logger {
     /**
      * @brief Get current buffer contents (for BUFFER output)
      */
-    std::string getBuffer() const;
+    std::string getBuffer() const noexcept;
 
     /**
      * @brief Clear buffer contents
@@ -119,11 +119,11 @@ class Logger {
     void clearBuffer();
 
   private:
-    Logger() : current_level_(LogLevel::INFO), output_type_(LogOutput::CONSOLE) {}
+    Logger() noexcept : current_level_(LogLevel::INFO), output_type_(LogOutput::CONSOLE) {}
 
-    void writeMessage(LogLevel level, const std::string& message);
-    std::string getCurrentTime() const;
-    std::string levelToString(LogLevel level) const;
+    void writeMessage(LogLevel level, std::string const& message);
+    std::string getCurrentTime() const noexcept;
+    std::string levelToString(LogLevel level) const noexcept;
 };
 
 // Convenience macros for zero-cost logging

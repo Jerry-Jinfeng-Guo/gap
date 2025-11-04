@@ -59,7 +59,7 @@ class CPULUSolver : public ILUSolver {
     /**
      * @brief Perform complete LU factorization in three phases
      */
-    bool factorize(const SparseMatrix& matrix) override {
+    bool factorize(SparseMatrix const& matrix) override {
         auto& logger = gap::logging::global_logger;
         logger.setComponent("CPULUSolver");
 
@@ -102,7 +102,7 @@ class CPULUSolver : public ILUSolver {
     /**
      * @brief Solve linear system using precomputed LU factors
      */
-    ComplexVector solve(const ComplexVector& rhs) override {
+    ComplexVector solve(ComplexVector const& rhs) override {
         if (!factorized_) {
             throw std::runtime_error("Matrix not factorized. Call factorize() first.");
         }
@@ -135,7 +135,7 @@ class CPULUSolver : public ILUSolver {
     /**
      * @brief Update existing factorization (for now, performs full refactorization)
      */
-    bool update_factorization(const SparseMatrix& matrix) override {
+    bool update_factorization(SparseMatrix const& matrix) override {
         auto& logger = gap::logging::global_logger;
         logger.setComponent("CPULUSolver");
         LOG_INFO(logger, "Updating factorization");
@@ -145,9 +145,9 @@ class CPULUSolver : public ILUSolver {
         return factorize(matrix);
     }
 
-    BackendType get_backend_type() const override { return BackendType::CPU; }
+    BackendType get_backend_type() const noexcept override { return BackendType::CPU; }
 
-    bool is_factorized() const override { return factorized_; }
+    bool is_factorized() const noexcept override { return factorized_; }
 
   private:
     /**

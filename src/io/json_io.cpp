@@ -31,13 +31,13 @@ class JsonValue {
 
   public:
     JsonValue() : type_(NULL_VALUE) {}
-    JsonValue(const std::string& s) : type_(STRING), str_value_(s) {}
+    JsonValue(std::string const& s) : type_(STRING), str_value_(s) {}
     JsonValue(double d) : type_(NUMBER), num_value_(d) {}
     JsonValue(bool b) : type_(BOOLEAN), bool_value_(b) {}
 
     Type getType() const { return type_; }
 
-    const std::string& asString() const {
+    std::string const& asString() const {
         if (type_ != STRING) throw std::runtime_error("Not a string");
         return str_value_;
     }
@@ -52,12 +52,12 @@ class JsonValue {
         return bool_value_;
     }
 
-    const std::unordered_map<std::string, JsonValue>& asObject() const {
+    std::unordered_map<std::string, JsonValue> const& asObject() const {
         if (type_ != OBJECT) throw std::runtime_error("Not an object");
         return obj_value_;
     }
 
-    const std::vector<JsonValue>& asArray() const {
+    std::vector<JsonValue> const& asArray() const {
         if (type_ != ARRAY) throw std::runtime_error("Not an array");
         return arr_value_;
     }

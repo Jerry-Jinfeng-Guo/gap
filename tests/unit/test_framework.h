@@ -26,20 +26,20 @@ class TestRunner {
     int failed_ = 0;
 
   public:
-    void add_test(const std::string& name, std::function<void()> test_func) {
+    void add_test(std::string const& name, std::function<void()> test_func) {
         tests_.push_back({name, test_func});
     }
 
     void run_all() {
         std::cout << "Running " << tests_.size() << " tests...\n" << std::endl;
 
-        for (const auto& test : tests_) {
+        for (auto const& test : tests_) {
             try {
                 std::cout << "Running " << test.name << "... ";
                 test.test_func();
                 std::cout << "PASSED" << std::endl;
                 passed_++;
-            } catch (const std::exception& e) {
+            } catch (std::exception const& e) {
                 std::cout << "FAILED: " << e.what() << std::endl;
                 failed_++;
             } catch (...) {
@@ -54,7 +54,7 @@ class TestRunner {
         std::cout << "  Total:  " << tests_.size() << std::endl;
     }
 
-    int get_failed_count() const { return failed_; }
+    constexpr int get_failed_count() const noexcept { return failed_; }
 };
 
 // Test assertion macros

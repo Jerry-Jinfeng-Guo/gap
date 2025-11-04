@@ -85,7 +85,7 @@ class GPULUSolver : public ILUSolver {
         }
     }
 
-    bool factorize(const SparseMatrix& matrix) override {
+    bool factorize(SparseMatrix const& matrix) override {
         // TODO: Implement GPU-based LU factorization using cuSOLVER
         std::cout << "GPULUSolver: Performing LU factorization on GPU" << std::endl;
         std::cout << "  Matrix size: " << matrix.num_rows << "x" << matrix.num_cols << std::endl;
@@ -134,7 +134,7 @@ class GPULUSolver : public ILUSolver {
         return true;
     }
 
-    ComplexVector solve(const ComplexVector& rhs) override {
+    ComplexVector solve(ComplexVector const& rhs) override {
         if (!factorized_) {
             throw std::runtime_error("Matrix not factorized. Call factorize() first.");
         }
@@ -177,7 +177,7 @@ class GPULUSolver : public ILUSolver {
         return solution;
     }
 
-    bool update_factorization(const SparseMatrix& matrix) override {
+    bool update_factorization(SparseMatrix const& matrix) override {
         // TODO: Implement efficient GPU factorization update
         std::cout << "GPULUSolver: Updating factorization on GPU" << std::endl;
 
@@ -185,9 +185,9 @@ class GPULUSolver : public ILUSolver {
         return factorize(matrix);
     }
 
-    BackendType get_backend_type() const override { return BackendType::GPU_CUDA; }
+    BackendType get_backend_type() const noexcept override { return BackendType::GPU_CUDA; }
 
-    bool is_factorized() const override { return factorized_; }
+    bool is_factorized() const noexcept override { return factorized_; }
 };
 
 }  // namespace gap::solver

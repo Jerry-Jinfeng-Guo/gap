@@ -22,7 +22,7 @@ Logger& Logger::getInstance() {
     return *instance_;
 }
 
-void Logger::configure(LogLevel level, LogOutput output, const std::string& filename) {
+void Logger::configure(LogLevel level, LogOutput output, std::string const& filename) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     current_level_ = level;
@@ -39,7 +39,7 @@ void Logger::configure(LogLevel level, LogOutput output, const std::string& file
     }
 }
 
-void Logger::writeMessage(LogLevel level, const std::string& message) {
+void Logger::writeMessage(LogLevel level, std::string const& message) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     std::ostringstream formatted;
@@ -83,7 +83,7 @@ void Logger::flush() {
     }
 }
 
-std::string Logger::getBuffer() const {
+std::string Logger::getBuffer() const noexcept {
     std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(mutex_));
     return buffer_.str();
 }
@@ -94,7 +94,7 @@ void Logger::clearBuffer() {
     buffer_.clear();
 }
 
-std::string Logger::getCurrentTime() const {
+std::string Logger::getCurrentTime() const noexcept {
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
@@ -106,7 +106,7 @@ std::string Logger::getCurrentTime() const {
     return oss.str();
 }
 
-std::string Logger::levelToString(LogLevel level) const {
+std::string Logger::levelToString(LogLevel level) const noexcept {
     switch (level) {
         case LogLevel::TRACE:
             return "TRACE";
@@ -125,11 +125,11 @@ std::string Logger::levelToString(LogLevel level) const {
     }
 }
 
-void Logger::logInfo(const std::string& message) { log(LogLevel::INFO, message); }
+void Logger::logInfo(std::string const& message) { log(LogLevel::INFO, message); }
 
-void Logger::logDebug(const std::string& message) { log(LogLevel::DEBUG, message); }
+void Logger::logDebug(std::string const& message) { log(LogLevel::DEBUG, message); }
 
-void Logger::logError(const std::string& message) { log(LogLevel::ERROR, message); }
+void Logger::logError(std::string const& message) { log(LogLevel::ERROR, message); }
 
 }  // namespace logging
 }  // namespace gap

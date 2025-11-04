@@ -19,7 +19,7 @@ class IIOModule {
      * @param filename Path to the input file
      * @return NetworkData structure containing the power system data
      */
-    virtual NetworkData read_network_data(const std::string& filename) = 0;
+    virtual NetworkData read_network_data(std::string const& filename) = 0;
 
     /**
      * @brief Write results to a file
@@ -28,7 +28,7 @@ class IIOModule {
      * @param converged Whether the power flow converged
      * @param iterations Number of iterations taken
      */
-    virtual void write_results(const std::string& filename, const ComplexVector& bus_voltages,
+    virtual void write_results(std::string const& filename, ComplexVector const& bus_voltages,
                                bool converged, int iterations) = 0;
 
     /**
@@ -36,7 +36,7 @@ class IIOModule {
      * @param filename Path to the file to validate
      * @return true if file format is valid
      */
-    virtual bool validate_input_format(const std::string& filename) = 0;
+    virtual bool validate_input_format(std::string const& filename) = 0;
 };
 
 }  // namespace gap::io

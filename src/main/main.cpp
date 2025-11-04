@@ -24,7 +24,7 @@ struct AppConfig {
 /**
  * @brief Print usage information
  */
-void print_usage(const char* program_name) {
+void print_usage(char const* program_name) {
     std::cout << "Usage: " << program_name << " [OPTIONS]\n"
               << "\nOPTIONS:\n"
               << "  -i, --input FILE      Input file path (required)\n"
@@ -117,7 +117,7 @@ AppConfig parse_arguments(int argc, char* argv[]) {
 /**
  * @brief Main power flow calculation function
  */
-int run_power_flow(const AppConfig& config) {
+int run_power_flow(AppConfig const& config) {
     auto& logger = gap::logging::global_logger;
     logger.setComponent("GAP");
 
@@ -196,7 +196,7 @@ int run_power_flow(const AppConfig& config) {
 
         return result.converged ? 0 : 1;
 
-    } catch (const std::exception& e) {
+    } catch (std::exception const& e) {
         LOG_ERROR(logger, "Error: {}", e.what());
         return 1;
     }
@@ -226,7 +226,7 @@ int main(int argc, char* argv[]) {
         // Run power flow calculation
         return run_power_flow(config);
 
-    } catch (const std::exception& e) {
+    } catch (std::exception const& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         print_usage(argv[0]);
         return 1;

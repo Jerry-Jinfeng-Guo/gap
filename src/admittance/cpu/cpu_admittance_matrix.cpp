@@ -11,7 +11,7 @@ namespace gap::admittance {
 class CPUAdmittanceMatrix : public IAdmittanceMatrix {
   public:
     std::unique_ptr<SparseMatrix> build_admittance_matrix(
-        const NetworkData& network_data) override {
+        NetworkData const& network_data) override {
         auto& logger = gap::logging::global_logger;
         logger.setComponent("CPUAdmittanceMatrix");
         LOG_INFO(logger, "Building admittance matrix");
@@ -195,7 +195,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         return updated_matrix;
     }
 
-    BackendType get_backend_type() const override { return BackendType::CPU; }
+    BackendType get_backend_type() const noexcept override { return BackendType::CPU; }
 };
 
 }  // namespace gap::admittance

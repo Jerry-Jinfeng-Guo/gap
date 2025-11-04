@@ -49,7 +49,7 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
     }
 
     std::unique_ptr<SparseMatrix> build_admittance_matrix(
-        const NetworkData& network_data) override {
+        NetworkData const& network_data) override {
         // TODO: Implement GPU-based admittance matrix construction using CUDA
         auto& logger = gap::logging::global_logger;
         logger.setComponent("GPUAdmittanceMatrix");
@@ -77,7 +77,7 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
     }
 
     std::unique_ptr<SparseMatrix> update_admittance_matrix(
-        const SparseMatrix& matrix, const std::vector<BranchData>& branch_changes) override {
+        SparseMatrix const& matrix, std::vector<BranchData> const& branch_changes) override {
         // TODO: Implement GPU-based incremental admittance matrix update
         auto& logger = gap::logging::global_logger;
         logger.setComponent("GPUAdmittanceMatrix");
@@ -98,7 +98,7 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
         return updated_matrix;
     }
 
-    BackendType get_backend_type() const override { return BackendType::GPU_CUDA; }
+    BackendType get_backend_type() const noexcept override { return BackendType::GPU_CUDA; }
 };
 
 }  // namespace gap::admittance

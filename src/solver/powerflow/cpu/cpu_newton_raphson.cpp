@@ -13,9 +13,9 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     gap::logging::Logger& logger = gap::logging::global_logger;
 
   public:
-    PowerFlowResult solve_power_flow(const NetworkData& network_data,
-                                     const SparseMatrix& admittance_matrix,
-                                     const PowerFlowConfig& config) override {
+    PowerFlowResult solve_power_flow(NetworkData const& network_data,
+                                     SparseMatrix const& admittance_matrix,
+                                     PowerFlowConfig const& config) override {
         // TODO: Implement CPU-based Newton-Raphson power flow solver
         logger.setComponent("CPUNewtonRaphson");
         LOG_INFO(logger, "Starting power flow solution");
@@ -88,9 +88,9 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         LOG_DEBUG(logger, "CPUNewtonRaphson: LU solver backend set");
     }
 
-    std::vector<double> calculate_mismatches(const NetworkData& network_data,
-                                             const ComplexVector& /*bus_voltages*/,
-                                             const SparseMatrix& /*admittance_matrix*/
+    std::vector<double> calculate_mismatches(NetworkData const& network_data,
+                                             ComplexVector const& /*bus_voltages*/,
+                                             SparseMatrix const& /*admittance_matrix*/
                                              ) override {
         // TODO: Implement full mismatch calculation with S = V * conj(Y * V)
         LOG_TRACE(logger, "CPUNewtonRaphson: Calculating power mismatches");
@@ -121,7 +121,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         return mismatches;
     }
 
-    BackendType get_backend_type() const override { return BackendType::CPU; }
+    BackendType get_backend_type() const noexcept override { return BackendType::CPU; }
 };
 
 }  // namespace gap::solver

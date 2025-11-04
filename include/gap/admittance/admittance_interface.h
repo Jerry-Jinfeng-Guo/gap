@@ -19,7 +19,7 @@ class IAdmittanceMatrix {
      * @return Sparse admittance matrix in CSR format
      */
     virtual std::unique_ptr<SparseMatrix> build_admittance_matrix(
-        const NetworkData& network_data) = 0;
+        NetworkData const& network_data) = 0;
 
     /**
      * @brief Update admittance matrix for topology changes
@@ -28,13 +28,13 @@ class IAdmittanceMatrix {
      * @return Updated sparse admittance matrix
      */
     virtual std::unique_ptr<SparseMatrix> update_admittance_matrix(
-        const SparseMatrix& matrix, const std::vector<BranchData>& branch_changes) = 0;
+        SparseMatrix const& matrix, std::vector<BranchData> const& branch_changes) = 0;
 
     /**
      * @brief Get backend type
      * @return Backend execution type
      */
-    virtual BackendType get_backend_type() const = 0;
+    virtual BackendType get_backend_type() const noexcept = 0;
 };
 
 }  // namespace gap::admittance

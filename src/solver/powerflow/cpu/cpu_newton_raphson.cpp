@@ -424,7 +424,20 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     }
 
     /**
-     * @brief Calculate Jacobian matrix elements (improved version)
+     * @brief Calculate Jacobian matrix elements using analytical power flow derivatives
+     *
+     * Power flow equations: P_i = V_i * Σ_k V_k * (G_ik cos(θ_i - θ_k) + B_ik sin(θ_i - θ_k))
+     *                       Q_i = V_i * Σ_k V_k * (G_ik sin(θ_i - θ_k) - B_ik cos(θ_i - θ_k))
+     *
+     * Jacobian elements:
+     *   ∂P_i/∂θ_i = -Q_i - B_ii * V_i²
+     *   ∂P_i/∂θ_j = V_i * V_j * (G_ij sin(θ_i - θ_j) - B_ij cos(θ_i - θ_j))   for i ≠ j
+     *   ∂P_i/∂V_i = (P_i/V_i) + G_ii * V_i
+     *   ∂P_i/∂V_j = V_i * (G_ij cos(θ_i - θ_j) + B_ij sin(θ_i - θ_j))         for i ≠ j
+     *   ∂Q_i/∂θ_i = P_i - G_ii * V_i²
+     *   ∂Q_i/∂θ_j = -V_i * V_j * (G_ij cos(θ_i - θ_j) + B_ij sin(θ_i - θ_j))  for i ≠ j
+     *   ∂Q_i/∂V_i = (Q_i/V_i) - B_ii * V_i
+     *   ∂Q_i/∂V_j = V_i * (G_ij sin(θ_i - θ_j) - B_ij cos(θ_i - θ_j))         for i ≠ j
      */
     void calculate_jacobian_elements(std::vector<std::vector<Float>>& jacobian,
                                      NetworkData const& network_data, ComplexVector const& voltages,
@@ -439,28 +452,35 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
 
         int n_buses = static_cast<int>(network_data.buses.size());
 
-        // Create realistic Jacobian based on power system characteristics
-        // Use voltage magnitudes and admittance values to create physically meaningful derivatives
-
+        // Extract voltage magnitudes and angles
         std::vector<Float> V_mag(n_buses);
-
-        // Extract voltage magnitudes
-        auto voltage_subrange = voltages | std::views::take(n_buses);
-        std::ranges::transform(voltage_subrange, V_mag.begin(), [](Complex const& v) {
-            Float mag = std::abs(v);
-            return (mag < 0.1) ? 1.0 : mag;  // Avoid division by zero
-        });
-
-        // Get average admittance magnitude for scaling
-        Float avg_Y_mag = 1.0;
-        if (Y_bus.nnz > 0) {
-            Float sum_Y = 0.0;
-            for (int idx = 0; idx < Y_bus.nnz; ++idx) {
-                sum_Y += std::abs(Y_bus.values[idx]);
-            }
-            avg_Y_mag = sum_Y / Y_bus.nnz;
-            if (avg_Y_mag < 1e-6) avg_Y_mag = 1.0;
+        std::vector<Float> V_angle(n_buses);
+        for (int i = 0; i < n_buses; ++i) {
+            V_mag[i] = std::abs(voltages[i]);
+            V_angle[i] = std::arg(voltages[i]);
+            if (V_mag[i] < 1e-6) V_mag[i] = 1.0;  // Avoid division by zero
         }
+
+        // Build G and B matrices (conductance and susceptance) from Y_bus
+        std::vector<std::vector<Float>> G(n_buses, std::vector<Float>(n_buses, 0.0));
+        std::vector<std::vector<Float>> B(n_buses, std::vector<Float>(n_buses, 0.0));
+
+        for (int i = 0; i < n_buses; ++i) {
+            if (i >= static_cast<int>(Y_bus.row_ptr.size() - 1)) continue;
+
+            for (int idx = Y_bus.row_ptr[i]; idx < Y_bus.row_ptr[i + 1]; ++idx) {
+                if (idx >= static_cast<int>(Y_bus.col_idx.size())) continue;
+
+                int j = Y_bus.col_idx[idx];
+                if (j >= n_buses) continue;
+
+                G[i][j] = Y_bus.values[idx].real();
+                B[i][j] = Y_bus.values[idx].imag();
+            }
+        }
+
+        // Calculate current power injections for diagonal terms
+        auto calculated_powers = calculate_bus_power_injections(voltages, Y_bus);
 
         // Build variable mapping
         std::vector<int> angle_var_idx(n_buses, -1);
@@ -468,10 +488,11 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         int slack_idx = -1;
 
         // Find slack bus
-        auto slack_iter = std::ranges::find_if(
-            network_data.buses, [](auto const& bus) { return bus.bus_type == BusType::SLACK; });
-        if (slack_iter != network_data.buses.end()) {
-            slack_idx = static_cast<int>(std::distance(network_data.buses.begin(), slack_iter));
+        for (int i = 0; i < n_buses; ++i) {
+            if (network_data.buses[i].bus_type == BusType::SLACK) {
+                slack_idx = i;
+                break;
+            }
         }
 
         int var_idx = 0;
@@ -488,11 +509,16 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             }
         }
 
-        // Fill Jacobian with realistic power flow derivatives
+        // Fill Jacobian with analytical power flow derivatives
         int eq_idx = 0;
 
         for (int i = 0; i < n_buses; ++i) {
             if (network_data.buses[i].bus_type == BusType::SLACK) continue;
+
+            Float Vi = V_mag[i];
+            Float theta_i = V_angle[i];
+            Float Pi = calculated_powers[i].real();
+            Float Qi = calculated_powers[i].imag();
 
             // P equation row
             if (eq_idx < static_cast<int>(jacobian.size())) {
@@ -501,13 +527,17 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                     if (angle_var_idx[j] >= 0 &&
                         angle_var_idx[j] < static_cast<int>(jacobian[eq_idx].size())) {
                         if (i == j) {
-                            // Diagonal: ∂P_i/∂θ_i - dominant diagonal for stability
-                            jacobian[eq_idx][angle_var_idx[j]] =
-                                avg_Y_mag * V_mag[i] * V_mag[i] * 2.0;
+                            // Diagonal: ∂P_i/∂θ_i = -Q_i - B_ii * V_i²
+                            jacobian[eq_idx][angle_var_idx[j]] = -Qi - B[i][i] * Vi * Vi;
                         } else {
-                            // Off-diagonal: ∂P_i/∂θ_j - weaker coupling
+                            // Off-diagonal: ∂P_i/∂θ_j = V_i * V_j * (G_ij sin(θ_i - θ_j) - B_ij
+                            // cos(θ_i - θ_j))
+                            Float Vj = V_mag[j];
+                            Float theta_j = V_angle[j];
+                            Float theta_ij = theta_i - theta_j;
                             jacobian[eq_idx][angle_var_idx[j]] =
-                                avg_Y_mag * V_mag[i] * V_mag[j] * 0.1;
+                                Vi * Vj *
+                                (G[i][j] * std::sin(theta_ij) - B[i][j] * std::cos(theta_ij));
                         }
                     }
                 }
@@ -517,11 +547,15 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                     if (mag_var_idx[j] >= 0 &&
                         mag_var_idx[j] < static_cast<int>(jacobian[eq_idx].size())) {
                         if (i == j) {
-                            // Diagonal: ∂P_i/∂V_i - strong diagonal for stability
-                            jacobian[eq_idx][mag_var_idx[j]] = avg_Y_mag * V_mag[i] * 3.0;
+                            // Diagonal: ∂P_i/∂V_i = (P_i/V_i) + G_ii * V_i
+                            jacobian[eq_idx][mag_var_idx[j]] = (Pi / Vi) + G[i][i] * Vi;
                         } else {
-                            // Off-diagonal: ∂P_i/∂V_j - weak coupling
-                            jacobian[eq_idx][mag_var_idx[j]] = avg_Y_mag * V_mag[i] * 0.05;
+                            // Off-diagonal: ∂P_i/∂V_j = V_i * (G_ij cos(θ_i - θ_j) + B_ij sin(θ_i -
+                            // θ_j))
+                            Float theta_j = V_angle[j];
+                            Float theta_ij = theta_i - theta_j;
+                            jacobian[eq_idx][mag_var_idx[j]] =
+                                Vi * (G[i][j] * std::cos(theta_ij) + B[i][j] * std::sin(theta_ij));
                         }
                     }
                 }
@@ -537,13 +571,17 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                     if (angle_var_idx[j] >= 0 &&
                         angle_var_idx[j] < static_cast<int>(jacobian[eq_idx].size())) {
                         if (i == j) {
-                            // Diagonal: ∂Q_i/∂θ_i - moderate diagonal
-                            jacobian[eq_idx][angle_var_idx[j]] =
-                                avg_Y_mag * V_mag[i] * V_mag[i] * 1.0;
+                            // Diagonal: ∂Q_i/∂θ_i = P_i - G_ii * V_i²
+                            jacobian[eq_idx][angle_var_idx[j]] = Pi - G[i][i] * Vi * Vi;
                         } else {
-                            // Off-diagonal: ∂Q_i/∂θ_j - weak coupling
+                            // Off-diagonal: ∂Q_i/∂θ_j = -V_i * V_j * (G_ij cos(θ_i - θ_j) + B_ij
+                            // sin(θ_i - θ_j))
+                            Float Vj = V_mag[j];
+                            Float theta_j = V_angle[j];
+                            Float theta_ij = theta_i - theta_j;
                             jacobian[eq_idx][angle_var_idx[j]] =
-                                avg_Y_mag * V_mag[i] * V_mag[j] * 0.02;
+                                -Vi * Vj *
+                                (G[i][j] * std::cos(theta_ij) + B[i][j] * std::sin(theta_ij));
                         }
                     }
                 }
@@ -553,23 +591,20 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                     if (mag_var_idx[j] >= 0 &&
                         mag_var_idx[j] < static_cast<int>(jacobian[eq_idx].size())) {
                         if (i == j) {
-                            // Diagonal: ∂Q_i/∂V_i - strong diagonal for Q-V sensitivity
-                            jacobian[eq_idx][mag_var_idx[j]] = avg_Y_mag * V_mag[i] * 2.5;
+                            // Diagonal: ∂Q_i/∂V_i = (Q_i/V_i) - B_ii * V_i
+                            jacobian[eq_idx][mag_var_idx[j]] = (Qi / Vi) - B[i][i] * Vi;
                         } else {
-                            // Off-diagonal: ∂Q_i/∂V_j - weak coupling
-                            jacobian[eq_idx][mag_var_idx[j]] = avg_Y_mag * V_mag[i] * 0.03;
+                            // Off-diagonal: ∂Q_i/∂V_j = V_i * (G_ij sin(θ_i - θ_j) - B_ij cos(θ_i -
+                            // θ_j))
+                            Float theta_j = V_angle[j];
+                            Float theta_ij = theta_i - theta_j;
+                            jacobian[eq_idx][mag_var_idx[j]] =
+                                Vi * (G[i][j] * std::sin(theta_ij) - B[i][j] * std::cos(theta_ij));
                         }
                     }
                 }
 
                 eq_idx++;
-            }
-        }
-
-        // Ensure matrix is well-conditioned by adding small diagonal terms if needed
-        for (size_t i = 0; i < jacobian.size() && i < jacobian[0].size(); ++i) {
-            if (std::abs(jacobian[i][i]) < 1e-10) {
-                jacobian[i][i] = avg_Y_mag * 0.1;
             }
         }
     }

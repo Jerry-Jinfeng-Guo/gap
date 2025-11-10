@@ -141,4 +141,4 @@ flake8 .
 
 ## License
 
-MIT License - see LICENSE file for details.
+MPL-2 License - see LICENSE file for details.

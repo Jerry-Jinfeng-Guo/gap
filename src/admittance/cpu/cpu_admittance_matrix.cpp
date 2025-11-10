@@ -19,6 +19,30 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         LOG_INFO(logger, "  Number of branches:", network_data.num_branches);
         LOG_INFO(logger, "  Number of appliances:", network_data.appliances.size());
 
+        // Auto-detect bus ID scheme and create mapping
+        // Strategy: Check if bus IDs are 0-based (start from 0) or 1-based (start from 1)
+        int min_bus_id = network_data.num_buses;
+        int max_bus_id = -1;
+
+        for (const auto& bus : network_data.buses) {
+            min_bus_id = std::min(min_bus_id, bus.id);
+            max_bus_id = std::max(max_bus_id, bus.id);
+        }
+
+        // Determine ID offset: if IDs start from 0, offset=0; if from 1, offset=1
+        int id_offset = min_bus_id;
+
+        // Create ID-to-index mapping for robust lookup
+        std::vector<int> id_to_idx(max_bus_id + 1, -1);  // Initialize with -1 (invalid)
+        for (size_t idx = 0; idx < network_data.buses.size(); ++idx) {
+            int bus_id = network_data.buses[idx].id;
+            if (bus_id >= 0 && bus_id <= max_bus_id) {
+                id_to_idx[bus_id] = static_cast<int>(idx);
+            }
+        }
+
+        LOG_INFO(logger, "  Bus ID range: [", min_bus_id, ",", max_bus_id, "], offset:", id_offset);
+
         auto matrix = std::make_unique<SparseMatrix>();
         matrix->num_rows = network_data.num_buses;
         matrix->num_cols = network_data.num_buses;
@@ -29,13 +53,15 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
             network_data.num_buses);
 
         // Process shunt appliances (capacitors, reactors) first
-        // Use actual appliances vector size rather than potentially uninitialized num_appliances
         for (auto const& appliance : network_data.appliances) {
             if (appliance.type == ApplianceType::SHUNT) {
-                int bus_idx = appliance.node - 1;  // Convert to 0-based indexing
-                if (bus_idx >= 0 && bus_idx < network_data.num_buses) {
-                    // Add shunt admittance to diagonal element
-                    diagonal_elements[bus_idx] += Complex(appliance.g1, appliance.b1);
+                // Use mapping instead of assuming offset
+                if (appliance.node >= 0 && appliance.node <= max_bus_id) {
+                    int bus_idx = id_to_idx[appliance.node];
+                    if (bus_idx >= 0 && bus_idx < network_data.num_buses) {
+                        // Add shunt admittance to diagonal element
+                        diagonal_elements[bus_idx] += Complex(appliance.g1, appliance.b1);
+                    }
                 }
             }
         }
@@ -46,8 +72,23 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
                 continue;  // Skip out-of-service branches
             }
 
-            int from_bus = branch.from_bus - 1;  // Convert to 0-based indexing
-            int to_bus = branch.to_bus - 1;      // Convert to 0-based indexing
+            // Use mapping for robust ID-to-index conversion
+            int from_bus = -1, to_bus = -1;
+
+            if (branch.from_bus >= 0 && branch.from_bus <= max_bus_id) {
+                from_bus = id_to_idx[branch.from_bus];
+            }
+            if (branch.to_bus >= 0 && branch.to_bus <= max_bus_id) {
+                to_bus = id_to_idx[branch.to_bus];
+            }
+
+            // Validate indices
+            if (from_bus < 0 || from_bus >= network_data.num_buses || to_bus < 0 ||
+                to_bus >= network_data.num_buses) {
+                LOG_WARN(logger, "  Skipping branch", branch.id,
+                         "with invalid bus IDs:", branch.from_bus, "→", branch.to_bus);
+                continue;
+            }
 
             // Calculate branch admittance from r1, x1, g1, b1 parameters
             // Series impedance: Z = r1 + j*x1

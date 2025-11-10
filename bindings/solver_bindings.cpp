@@ -97,22 +97,6 @@ void init_solver_bindings(pybind11::module& m) {
                     branch.id = static_cast<int>(branch_data[i][0]);
                     branch.from_bus = static_cast<int>(branch_data[i][1]);
                     branch.to_bus = static_cast<int>(branch_data[i][2]);
-
-                    // Validate bus IDs are 1-based and within range
-                    if (branch.from_bus < 1 ||
-                        branch.from_bus > static_cast<int>(bus_data.size())) {
-                        throw std::runtime_error(
-                            "Branch from_bus must be 1-based and within valid range [1, " +
-                            std::to_string(bus_data.size()) +
-                            "], got: " + std::to_string(branch.from_bus));
-                    }
-                    if (branch.to_bus < 1 || branch.to_bus > static_cast<int>(bus_data.size())) {
-                        throw std::runtime_error(
-                            "Branch to_bus must be 1-based and within valid range [1, " +
-                            std::to_string(bus_data.size()) +
-                            "], got: " + std::to_string(branch.to_bus));
-                    }
-
                     branch.status = true;
                     branch.r1 = branch_data[i][3];
                     branch.x1 = branch_data[i][4];
@@ -189,7 +173,7 @@ void init_solver_bindings(pybind11::module& m) {
           
           Args:
               bus_data: List of bus data, each bus: [id, u_rated, bus_type, u_pu, u_angle, p_load, q_load]
-                       id: Bus ID (1-based, must be unique)
+                       id: Bus ID (can be 0-based or 1-based, auto-detected)
                        u_rated: Rated voltage in Volts (e.g., 11000.0)  
                        bus_type: 0=PQ, 1=PV, 2=SLACK
                        u_pu: Initial voltage magnitude in p.u. (e.g., 1.0)
@@ -198,8 +182,8 @@ void init_solver_bindings(pybind11::module& m) {
                        q_load: Reactive power load in VAr (negative for loads)
               branch_data: List of branch data, each branch: [id, from_bus, to_bus, r, x, b(optional)]
                        id: Branch ID (can be any integer)
-                       from_bus: Source bus ID (1-based, must exist in bus_data)
-                       to_bus: Destination bus ID (1-based, must exist in bus_data)
+                       from_bus: Source bus ID (must match ID scheme in bus_data)
+                       to_bus: Destination bus ID (must match ID scheme in bus_data)
                        r: Resistance in Ohms
                        x: Reactance in Ohms
                        b: Susceptance in Siemens (optional, default: 0.0)
@@ -212,6 +196,6 @@ void init_solver_bindings(pybind11::module& m) {
               Last row contains metadata: [converged(0/1), iterations, final_mismatch, 0]
           
           Note:
-              Bus IDs must be 1-based (starting from 1, not 0) to follow power system conventions.
+              Bus IDs are auto-detected as 0-based or 1-based. Both conventions work seamlessly.
           )");
 }

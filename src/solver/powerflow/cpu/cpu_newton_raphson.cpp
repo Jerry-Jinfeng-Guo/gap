@@ -53,10 +53,10 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                 calculate_mismatches(network_data, result.bus_voltages, admittance_matrix);
 
             // Check convergence
-            double max_mismatch = 0.0;
+            Float max_mismatch = 0.0;
             if (!mismatches.empty()) {
                 auto max_iter = std::ranges::max_element(
-                    mismatches, [](double a, double b) { return std::abs(a) < std::abs(b); });
+                    mismatches, [](Float a, Float b) { return std::abs(a) < std::abs(b); });
                 max_mismatch = std::abs(*max_iter);
             }
 
@@ -86,7 +86,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         if (config.verbose) {
             LOG_DEBUG(logger, "  Final voltage magnitudes (p.u.):");
             for (size_t i = 0; i < result.bus_voltages.size(); ++i) {
-                double vm = std::abs(result.bus_voltages[i]);
+                Float vm = std::abs(result.bus_voltages[i]);
                 LOG_DEBUG(logger, "    Bus", (i + 1), ":", vm, "p.u.");
             }
         }
@@ -99,12 +99,12 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         LOG_DEBUG(logger, "CPUNewtonRaphson: LU solver backend set");
     }
 
-    std::vector<double> calculate_mismatches(NetworkData const& network_data,
-                                             ComplexVector const& bus_voltages,
-                                             SparseMatrix const& admittance_matrix) override {
+    std::vector<Float> calculate_mismatches(NetworkData const& network_data,
+                                            ComplexVector const& bus_voltages,
+                                            SparseMatrix const& admittance_matrix) override {
         LOG_TRACE(logger, "CPUNewtonRaphson: Calculating power mismatches");
 
-        std::vector<double> mismatches;
+        std::vector<Float> mismatches;
 
         // Calculate power injections S_i = V_i * conj(I_i) = V_i * conj(Y_bus * V)
         auto calculated_powers = calculate_bus_power_injections(bus_voltages, admittance_matrix);
@@ -120,13 +120,13 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             auto specified_power = get_specified_power_at_bus(network_data, i);
 
             // P mismatch: ΔP_i = P_calculated - P_specified (Newton-Raphson standard convention)
-            double p_mismatch = calculated_powers[i].real() - specified_power.real();
+            Float p_mismatch = calculated_powers[i].real() - specified_power.real();
             mismatches.push_back(p_mismatch);
 
             if (network_data.buses[i].bus_type == BusType::PQ) {
                 // Q mismatch: ΔQ_i = Q_calculated - Q_specified (Newton-Raphson standard
                 // convention)
-                double q_mismatch = calculated_powers[i].imag() - specified_power.imag();
+                Float q_mismatch = calculated_powers[i].imag() - specified_power.imag();
                 mismatches.push_back(q_mismatch);
             }
             // PV buses: only P equation, Q is free variable within limits
@@ -206,10 +206,10 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     /**
      * @brief Solve Newton's correction equations: J * Δx = -F
      */
-    std::vector<double> solve_newton_correction(NetworkData const& network_data,
-                                                std::vector<double> const& mismatches,
-                                                ComplexVector const& voltages,
-                                                SparseMatrix const& Y_bus) const {
+    std::vector<Float> solve_newton_correction(NetworkData const& network_data,
+                                               std::vector<Float> const& mismatches,
+                                               ComplexVector const& voltages,
+                                               SparseMatrix const& Y_bus) const {
         LOG_TRACE(logger, "CPUNewtonRaphson: Building Jacobian and solving linear system");
 
         // Build the Jacobian matrix for power flow equations
@@ -217,7 +217,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
 
         if (!lu_solver_) {
             LOG_ERROR(logger, "LU solver not initialized");
-            return std::vector<double>(mismatches.size(), 0.0);
+            return std::vector<Float>(mismatches.size(), 0.0);
         }
 
         // Convert Jacobian to sparse format for LU solver
@@ -226,19 +226,19 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         // Negate mismatches for Newton's method: J * Δx = -F
         ComplexVector rhs_complex(mismatches.size());
         std::ranges::transform(mismatches, rhs_complex.begin(),
-                               [](double mismatch) { return Complex(-mismatch, 0.0); });
+                               [](Float mismatch) { return Complex(-mismatch, 0.0); });
 
         // Factorize and solve
         bool factorized = lu_solver_->factorize(jacobian_sparse);
         if (!factorized) {
             LOG_ERROR(logger, "Failed to factorize Jacobian matrix");
-            return std::vector<double>(mismatches.size(), 0.0);
+            return std::vector<Float>(mismatches.size(), 0.0);
         }
 
         ComplexVector solution_complex = lu_solver_->solve(rhs_complex);
 
         // Convert back to real solution
-        std::vector<double> solution(solution_complex.size());
+        std::vector<Float> solution(solution_complex.size());
         std::ranges::transform(solution_complex, solution.begin(),
                                [](Complex const& c) { return c.real(); });
 
@@ -249,7 +249,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
      * @brief Update voltage estimates with Newton corrections
      */
     void update_voltage_estimates(NetworkData const& network_data, ComplexVector& voltages,
-                                  std::vector<double> const& corrections) const {
+                                  std::vector<Float> const& corrections) const {
         if (corrections.empty()) {
             return;
         }
@@ -268,17 +268,17 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         int corr_idx = 0;
 
         // Use adaptive damping factor to prevent overshooting
-        double const damping_factor = 0.9;  // Less conservative for faster convergence
+        Float const damping_factor = 0.9;  // Less conservative for faster convergence
 
         // Update voltage angles (excluding slack bus)
         for (int i = 0; i < n_buses; ++i) {
             if (i != slack_idx && corr_idx < static_cast<int>(corrections.size())) {
-                double V_mag = std::abs(voltages[i]);
-                double V_angle =
+                Float V_mag = std::abs(voltages[i]);
+                Float V_angle =
                     std::arg(voltages[i]) + damping_factor * corrections[corr_idx];  // Damped Δθ
 
                 // Limit angle changes to prevent instability
-                double angle_correction = damping_factor * corrections[corr_idx];
+                Float angle_correction = damping_factor * corrections[corr_idx];
                 if (std::abs(angle_correction) > 0.15) {  // Limit to ~8.5 degrees
                     angle_correction = 0.15 * (angle_correction > 0 ? 1.0 : -1.0);
                 }
@@ -293,16 +293,16 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         for (int i = 0; i < n_buses; ++i) {
             if (network_data.buses[i].bus_type == BusType::PQ &&
                 corr_idx < static_cast<int>(corrections.size())) {
-                double V_mag_old = std::abs(voltages[i]);
-                double V_mag_correction = damping_factor * corrections[corr_idx];  // Damped ΔV
+                Float V_mag_old = std::abs(voltages[i]);
+                Float V_mag_correction = damping_factor * corrections[corr_idx];  // Damped ΔV
 
                 // Limit magnitude changes to prevent instability
                 if (std::abs(V_mag_correction) > 0.08) {  // Limit to 8% change
                     V_mag_correction = 0.08 * (V_mag_correction > 0 ? 1.0 : -1.0);
                 }
 
-                double V_mag = V_mag_old + V_mag_correction;
-                double V_angle = std::arg(voltages[i]);
+                Float V_mag = V_mag_old + V_mag_correction;
+                Float V_angle = std::arg(voltages[i]);
 
                 // Keep voltage magnitude in reasonable bounds
                 V_mag = std::max(V_mag, 0.8);  // Minimum voltage magnitude (0.8 p.u.)
@@ -317,13 +317,13 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     /**
      * @brief Build the Jacobian matrix for Newton-Raphson power flow
      */
-    std::vector<std::vector<double>> build_jacobian_matrix(NetworkData const& network_data,
-                                                           ComplexVector const& voltages,
-                                                           SparseMatrix const& Y_bus) const {
+    std::vector<std::vector<Float>> build_jacobian_matrix(NetworkData const& network_data,
+                                                          ComplexVector const& voltages,
+                                                          SparseMatrix const& Y_bus) const {
         // Count number of variables and equations
         int n_vars = count_newton_variables(network_data);
 
-        std::vector<std::vector<double>> jacobian(n_vars, std::vector<double>(n_vars, 0.0));
+        std::vector<std::vector<Float>> jacobian(n_vars, std::vector<Float>(n_vars, 0.0));
 
         if (n_vars == 0) {
             return jacobian;  // No variables to solve for
@@ -354,7 +354,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     /**
      * @brief Calculate Jacobian matrix elements (improved version)
      */
-    void calculate_jacobian_elements(std::vector<std::vector<double>>& jacobian,
+    void calculate_jacobian_elements(std::vector<std::vector<Float>>& jacobian,
                                      NetworkData const& network_data, ComplexVector const& voltages,
                                      SparseMatrix const& Y_bus) const {
         if (Y_bus.nnz == 0 || jacobian.empty()) {
@@ -370,19 +370,19 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         // Create realistic Jacobian based on power system characteristics
         // Use voltage magnitudes and admittance values to create physically meaningful derivatives
 
-        std::vector<double> V_mag(n_buses);
+        std::vector<Float> V_mag(n_buses);
 
         // Extract voltage magnitudes
         auto voltage_subrange = voltages | std::views::take(n_buses);
         std::ranges::transform(voltage_subrange, V_mag.begin(), [](Complex const& v) {
-            double mag = std::abs(v);
+            Float mag = std::abs(v);
             return (mag < 0.1) ? 1.0 : mag;  // Avoid division by zero
         });
 
         // Get average admittance magnitude for scaling
-        double avg_Y_mag = 1.0;
+        Float avg_Y_mag = 1.0;
         if (Y_bus.nnz > 0) {
-            double sum_Y = 0.0;
+            Float sum_Y = 0.0;
             for (int idx = 0; idx < Y_bus.nnz; ++idx) {
                 sum_Y += std::abs(Y_bus.values[idx]);
             }
@@ -506,7 +506,7 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
      * @brief Convert dense matrix to sparse CSR format
      */
     SparseMatrix convert_to_sparse_matrix(
-        std::vector<std::vector<double>> const& dense_matrix) const {
+        std::vector<std::vector<Float>> const& dense_matrix) const {
         SparseMatrix sparse;
 
         if (dense_matrix.empty()) {

@@ -90,7 +90,7 @@ void test_gpu_lu_solver_memory_management() {
         bool success = lu_solver->factorize(matrix);
         ASSERT_TRUE(success);
 
-        ComplexVector rhs(5, Complex(1.0, static_cast<double>(iter)));
+        ComplexVector rhs(5, Complex(1.0, static_cast<Float>(iter)));
         ComplexVector solution = lu_solver->solve(rhs);
         ASSERT_EQ(5, solution.size());
     }

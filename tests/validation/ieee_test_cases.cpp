@@ -146,7 +146,7 @@ void test_ieee14_bus_case() {
 
         // Check voltage magnitude bounds (typical for power systems)
         for (size_t i = 0; i < result.bus_voltages.size(); ++i) {
-            double vm = std::abs(result.bus_voltages[i]);
+            Float vm = std::abs(result.bus_voltages[i]);
             ASSERT_TRUE(vm > 0.8);  // Lower bound
             ASSERT_TRUE(vm < 1.2);  // Upper bound
 
@@ -234,12 +234,12 @@ void test_simple_3bus_case() {
     ASSERT_EQ(3, result.bus_voltages.size());
 
     // Slack bus voltage should remain close to specified
-    double slack_vm = std::abs(result.bus_voltages[0]);
+    Float slack_vm = std::abs(result.bus_voltages[0]);
     ASSERT_NEAR(1.05, slack_vm, 0.05);
 
     // Load bus voltages should be lower due to voltage drop
     for (int i = 1; i < 3; ++i) {
-        double vm = std::abs(result.bus_voltages[i]);
+        Float vm = std::abs(result.bus_voltages[i]);
         ASSERT_TRUE(vm < slack_vm);  // Should be lower than slack
         ASSERT_TRUE(vm > 0.85);      // But not too low
     }
@@ -336,7 +336,7 @@ void test_backend_comparison() {
     // Placeholder result check - just verify CPU results are reasonable
     ASSERT_EQ(5, cpu_result.bus_voltages.size());
     for (size_t i = 0; i < cpu_result.bus_voltages.size(); ++i) {
-        double cpu_vm = std::abs(cpu_result.bus_voltages[i]);
+        Float cpu_vm = std::abs(cpu_result.bus_voltages[i]);
         ASSERT_TRUE(cpu_vm > 0.5 && cpu_vm < 2.0);  // Reasonable voltage bounds
     }
 }

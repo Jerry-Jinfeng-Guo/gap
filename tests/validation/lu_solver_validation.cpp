@@ -20,7 +20,7 @@ using namespace std::chrono;
  * - Sparse pattern (buses connected through branches)
  * - Complex values (impedances)
  */
-SparseMatrix generate_power_system_matrix(int size, double sparsity_ratio = 0.1) {
+SparseMatrix generate_power_system_matrix(int size, Float sparsity_ratio = 0.1) {
     std::mt19937 gen(12345);  // Fixed seed for reproducibility
     std::uniform_real_distribution<> real_dist(-1.0, 1.0);
     std::uniform_real_distribution<> imag_dist(-0.5, 0.5);
@@ -135,11 +135,11 @@ ComplexVector matrix_vector_multiply(const SparseMatrix& matrix, const ComplexVe
 /**
  * @brief Compute residual norm: ||Ax - b||
  */
-double compute_residual_norm(const SparseMatrix& matrix, const ComplexVector& solution,
-                             const ComplexVector& rhs) {
+Float compute_residual_norm(const SparseMatrix& matrix, const ComplexVector& solution,
+                            const ComplexVector& rhs) {
     ComplexVector residual = matrix_vector_multiply(matrix, solution);
 
-    double norm_squared = 0.0;
+    Float norm_squared = 0.0;
     for (int i = 0; i < static_cast<int>(rhs.size()); ++i) {
         Complex diff = residual[i] - rhs[i];
         norm_squared += std::norm(diff);  // |z|^2 = real^2 + imag^2
@@ -152,8 +152,8 @@ double compute_residual_norm(const SparseMatrix& matrix, const ComplexVector& so
  * @brief Validation criteria structure for different matrix sizes
  */
 struct ValidationCriteria {
-    double max_solution_error;
-    double max_residual_norm;
+    Float max_solution_error;
+    Float max_residual_norm;
     long max_factorize_time_ms;
     std::string description;
 };
@@ -161,7 +161,7 @@ struct ValidationCriteria {
 /**
  * @brief Generic matrix validation function with configurable parameters
  */
-void validate_lu_solver_matrix(int size, double sparsity_ratio, const ValidationCriteria& criteria,
+void validate_lu_solver_matrix(int size, Float sparsity_ratio, const ValidationCriteria& criteria,
                                const std::string& test_name) {
     std::cout << "Running " << test_name << " (" << size << "x" << size << ")..." << std::endl;
 
@@ -183,7 +183,7 @@ void validate_lu_solver_matrix(int size, double sparsity_ratio, const Validation
     auto solve_time = high_resolution_clock::now();
 
     // Compute solution accuracy
-    double solution_error = 0.0;
+    Float solution_error = 0.0;
     for (int i = 0; i < size; ++i) {
         Complex diff = computed_solution[i] - known_solution[i];
         solution_error += std::norm(diff);
@@ -191,7 +191,7 @@ void validate_lu_solver_matrix(int size, double sparsity_ratio, const Validation
     solution_error = std::sqrt(solution_error);
 
     // Compute residual accuracy
-    double residual_norm = compute_residual_norm(matrix, computed_solution, rhs);
+    Float residual_norm = compute_residual_norm(matrix, computed_solution, rhs);
 
     // Timing
     auto factorize_duration = duration_cast<milliseconds>(factorize_time - start_time);
@@ -289,8 +289,8 @@ void test_lu_solver_multiple_solves_large() {
     ASSERT_TRUE(success);
 
     // Perform multiple solves with different RHS
-    std::vector<double> solve_times;
-    std::vector<double> solution_errors;
+    std::vector<Float> solve_times;
+    std::vector<Float> solution_errors;
 
     for (int solve_idx = 0; solve_idx < num_solves; ++solve_idx) {
         auto [known_solution, rhs_placeholder] = generate_known_solution(size);
@@ -301,7 +301,7 @@ void test_lu_solver_multiple_solves_large() {
         auto solve_end = high_resolution_clock::now();
 
         // Compute accuracy
-        double solution_error = 0.0;
+        Float solution_error = 0.0;
         for (int i = 0; i < size; ++i) {
             Complex diff = computed_solution[i] - known_solution[i];
             solution_error += std::norm(diff);
@@ -314,8 +314,8 @@ void test_lu_solver_multiple_solves_large() {
     }
 
     // Compute statistics
-    double avg_solve_time = 0.0, max_solve_time = 0.0, min_solve_time = 1e9;
-    double avg_error = 0.0, max_error = 0.0;
+    Float avg_solve_time = 0.0, max_solve_time = 0.0, min_solve_time = 1e9;
+    Float avg_error = 0.0, max_error = 0.0;
 
     for (int i = 0; i < num_solves; ++i) {
         avg_solve_time += solve_times[i];
@@ -350,9 +350,9 @@ void test_lu_solver_scalability() {
     std::cout << "Running LU Solver Scalability Analysis..." << std::endl;
 
     std::vector<int> test_sizes = {50, 100, 200, 300, 400, 500, 1000};
-    std::vector<double> factorize_times;
-    std::vector<double> solve_times;
-    std::vector<double> solution_errors;
+    std::vector<Float> factorize_times;
+    std::vector<Float> solve_times;
+    std::vector<Float> solution_errors;
 
     for (int size : test_sizes) {
         SparseMatrix matrix = generate_power_system_matrix(size, 0.02);  // 2% sparsity
@@ -371,7 +371,7 @@ void test_lu_solver_scalability() {
         auto solve_end = high_resolution_clock::now();
 
         // Compute accuracy
-        double solution_error = 0.0;
+        Float solution_error = 0.0;
         for (int i = 0; i < size; ++i) {
             Complex diff = computed_solution[i] - known_solution[i];
             solution_error += std::norm(diff);
@@ -381,7 +381,7 @@ void test_lu_solver_scalability() {
         auto factorize_duration = duration_cast<milliseconds>(factorize_time - start_time);
         auto solve_duration = duration_cast<microseconds>(solve_end - factorize_time);
 
-        double sparsity = (100.0 * matrix.nnz) / (size * size);
+        Float sparsity = (100.0 * matrix.nnz) / (size * size);
 
         std::cout << "  Size\tnnz\tSparsity\tFactorize(ms)\tSolve(μs)\tError\n";
         std::cout << "  ----\t---\t--------\t------------\t---------\t-----\n";

@@ -14,6 +14,8 @@
 // In production, would use nlohmann/json or similar library
 namespace {
 
+using gap::Float;  // Import Float type into anonymous namespace for JSON parsing
+
 /**
  * @brief Simple JSON value class for PGM parsing
  */
@@ -24,7 +26,7 @@ class JsonValue {
   private:
     Type type_;
     std::string str_value_;
-    double num_value_;
+    Float num_value_;
     std::unordered_map<std::string, JsonValue> obj_value_;
     std::vector<JsonValue> arr_value_;
     bool bool_value_;
@@ -32,7 +34,7 @@ class JsonValue {
   public:
     JsonValue() : type_(NULL_VALUE) {}
     JsonValue(std::string const& s) : type_(STRING), str_value_(s) {}
-    JsonValue(double d) : type_(NUMBER), num_value_(d) {}
+    JsonValue(Float d) : type_(NUMBER), num_value_(d) {}
     JsonValue(bool b) : type_(BOOLEAN), bool_value_(b) {}
 
     Type getType() const { return type_; }
@@ -42,7 +44,7 @@ class JsonValue {
         return str_value_;
     }
 
-    double asNumber() const {
+    Float asNumber() const {
         if (type_ != NUMBER) throw std::runtime_error("Not a number");
         return num_value_;
     }
@@ -140,8 +142,8 @@ BranchData convertPgmLine(const JsonValue& pgm_line) {
 
     // Convert capacitive parameters to admittance using our helper function
     if (pgm_line.contains("c1") && pgm_line.contains("tan1")) {
-        double c1 = pgm_line["c1"].asNumber();
-        double tan1 = pgm_line["tan1"].asNumber();
+        Float c1 = pgm_line["c1"].asNumber();
+        Float tan1 = pgm_line["tan1"].asNumber();
         branch.set_from_pgm_capacitive_params(c1, tan1, 50.0);  // 50Hz European grid
     }
 
@@ -222,21 +224,21 @@ BranchData convertPgmTransformer(const JsonValue& pgm_transformer) {
     branch.branch_type = BranchType::TRAFO;
 
     // Extract voltages and rated power
-    double u1 = pgm_transformer["u1"].asNumber();  // Primary voltage (V)
-    double u2 = pgm_transformer["u2"].asNumber();  // Secondary voltage (V)
-    double sn = pgm_transformer["sn"].asNumber();  // Rated power (VA)
-    double uk = pgm_transformer["uk"].asNumber();  // Short-circuit voltage (p.u.)
+    Float u1 = pgm_transformer["u1"].asNumber();  // Primary voltage (V)
+    Float u2 = pgm_transformer["u2"].asNumber();  // Secondary voltage (V)
+    Float sn = pgm_transformer["sn"].asNumber();  // Rated power (VA)
+    Float uk = pgm_transformer["uk"].asNumber();  // Short-circuit voltage (p.u.)
 
     // Calculate transformer parameters
     // uk is the short-circuit voltage in p.u. on the transformer rated power
     // For impedance calculation: Z_base = U²/S
-    double z_base_primary = (u1 * u1) / sn;  // Base impedance on primary side (Ω)
+    Float z_base_primary = (u1 * u1) / sn;  // Base impedance on primary side (Ω)
 
     // Convert uk (p.u.) to actual impedance
-    double z_total = uk * z_base_primary;  // Total impedance (Ω)
+    Float z_total = uk * z_base_primary;  // Total impedance (Ω)
 
     // Assume typical transformer X/R ratio of 10 (unless specified)
-    double xr_ratio = 10.0;
+    Float xr_ratio = 10.0;
     if (pgm_transformer.contains("rx_ratio")) {
         xr_ratio = 1.0 / pgm_transformer["rx_ratio"].asNumber();  // rx_ratio is R/X, we need X/R
     }
@@ -244,7 +246,7 @@ BranchData convertPgmTransformer(const JsonValue& pgm_transformer) {
     // Calculate R and X from total impedance
     // Z² = R² + X², X = xr_ratio * R
     // Z² = R² + (xr_ratio * R)² = R² * (1 + xr_ratio²)
-    double r_factor = 1.0 / std::sqrt(1.0 + xr_ratio * xr_ratio);
+    Float r_factor = 1.0 / std::sqrt(1.0 + xr_ratio * xr_ratio);
     branch.r1 = z_total * r_factor;
     branch.x1 = z_total * xr_ratio * r_factor;
 
@@ -253,16 +255,16 @@ BranchData convertPgmTransformer(const JsonValue& pgm_transformer) {
 
     // Handle tap changer if present
     if (pgm_transformer.contains("tap_pos") && pgm_transformer.contains("tap_size")) {
-        double tap_pos = pgm_transformer["tap_pos"].asNumber();
-        double tap_size = pgm_transformer["tap_size"].asNumber();  // Tap size in per mille
+        Float tap_pos = pgm_transformer["tap_pos"].asNumber();
+        Float tap_size = pgm_transformer["tap_size"].asNumber();  // Tap size in per mille
         // Modify tap ratio based on tap position (tap_size is typically in ‰)
-        double tap_factor = 1.0 + (tap_pos * tap_size / 100000.0);
+        Float tap_factor = 1.0 + (tap_pos * tap_size / 100000.0);
         branch.k *= tap_factor;
     }
 
     // Phase shift from vector group (clock position)
     if (pgm_transformer.contains("clock")) {
-        double clock = pgm_transformer["clock"].asNumber();
+        Float clock = pgm_transformer["clock"].asNumber();
         branch.theta = clock * M_PI / 6.0;  // Clock * 30° converted to radians
     } else {
         branch.theta = 0.0;
@@ -586,7 +588,7 @@ std::string parseString(const std::string& str, size_t& pos) {
     return result;
 }
 
-double parseNumber(const std::string& str, size_t& pos) {
+Float parseNumber(const std::string& str, size_t& pos) {
     size_t start = pos;
 
     // Handle optional negative sign
@@ -623,7 +625,7 @@ double parseNumber(const std::string& str, size_t& pos) {
     }
 
     std::string numStr = str.substr(start, pos - start);
-    return std::stod(numStr);
+    return static_cast<Float>(std::stod(numStr));
 }
 
 JsonValue parseValue(const std::string& str, size_t& pos);

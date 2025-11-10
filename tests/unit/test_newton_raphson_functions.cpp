@@ -20,9 +20,9 @@ class TestableNewtonRaphson {
     }
 
     // Expose calculate_mismatches for testing
-    std::vector<double> test_calculate_mismatches(NetworkData const& network_data,
-                                                  ComplexVector const& bus_voltages,
-                                                  SparseMatrix const& admittance_matrix) {
+    std::vector<Float> test_calculate_mismatches(NetworkData const& network_data,
+                                                 ComplexVector const& bus_voltages,
+                                                 SparseMatrix const& admittance_matrix) {
         return solver_->calculate_mismatches(network_data, bus_voltages, admittance_matrix);
     }
 
@@ -308,7 +308,7 @@ void test_power_flow_convergence_realistic() {
 
     // Voltage magnitudes should be in reasonable range
     for (auto const& voltage : result.bus_voltages) {
-        double magnitude = std::abs(voltage);
+        Float magnitude = std::abs(voltage);
         ASSERT_TRUE(magnitude >= 0.5);  // Not too low
         ASSERT_TRUE(magnitude <= 2.0);  // Not too high
         ASSERT_TRUE(std::isfinite(magnitude));
@@ -339,7 +339,7 @@ void test_power_flow_tight_tolerance() {
 
     // Voltages should be reasonable regardless of convergence
     for (auto const& voltage : result.bus_voltages) {
-        double magnitude = std::abs(voltage);
+        Float magnitude = std::abs(voltage);
         ASSERT_TRUE(magnitude >= 0.3);
         ASSERT_TRUE(magnitude <= 3.0);
         ASSERT_TRUE(std::isfinite(magnitude));

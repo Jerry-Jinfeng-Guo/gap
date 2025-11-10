@@ -89,7 +89,7 @@ void test_gpu_powerflow_convergence() {
 
     // Check that voltage magnitudes are reasonable
     for (auto const& voltage : result.bus_voltages) {
-        double magnitude = std::abs(voltage);
+        Float magnitude = std::abs(voltage);
         ASSERT_TRUE(magnitude > 0.5);  // Not too low
         ASSERT_TRUE(magnitude < 2.0);  // Not too high
     }
@@ -140,9 +140,9 @@ void test_gpu_powerflow_different_configs() {
                      Complex(10.0, -25.0)};
 
     // Test with different tolerances
-    std::vector<double> tolerances = {1e-3, 1e-4, 1e-5};
+    std::vector<Float> tolerances = {1e-3, 1e-4, 1e-5};
 
-    for (double tol : tolerances) {
+    for (Float tol : tolerances) {
         solver::PowerFlowConfig config;
         config.tolerance = tol;
         config.max_iterations = 15;

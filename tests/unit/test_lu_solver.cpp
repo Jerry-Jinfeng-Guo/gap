@@ -115,7 +115,7 @@ void test_lu_numerical_accuracy_3x3() {
     ASSERT_EQ(3, solution.size());
 
     // Verify solution accuracy (should be close to [1, 1, 1])
-    double tolerance = 1e-10;
+    Float tolerance = 1e-10;
     ASSERT_TRUE(std::abs(solution[0].real() - 1.0) < tolerance);
     ASSERT_TRUE(std::abs(solution[1].real() - 1.0) < tolerance);
     ASSERT_TRUE(std::abs(solution[2].real() - 1.0) < tolerance);
@@ -173,7 +173,7 @@ void test_lu_diagonal_matrix() {
     ComplexVector solution = lu_solver->solve(rhs);
 
     // Solution should be [2, 2, 2]
-    double tolerance = 1e-12;
+    Float tolerance = 1e-12;
     ASSERT_TRUE(std::abs(solution[0].real() - 2.0) < tolerance);
     ASSERT_TRUE(std::abs(solution[1].real() - 2.0) < tolerance);
     ASSERT_TRUE(std::abs(solution[2].real() - 2.0) < tolerance);
@@ -198,7 +198,7 @@ void test_lu_identity_matrix() {
     ComplexVector solution = lu_solver->solve(rhs);
 
     // Solution should equal RHS for identity matrix
-    double tolerance = 1e-12;
+    Float tolerance = 1e-12;
     ASSERT_TRUE(std::abs(solution[0] - rhs[0]) < tolerance);
     ASSERT_TRUE(std::abs(solution[1] - rhs[1]) < tolerance);
     ASSERT_TRUE(std::abs(solution[2] - rhs[2]) < tolerance);
@@ -328,7 +328,7 @@ void test_lu_multiple_solves() {
     ASSERT_EQ(2, sol3.size());
 
     // Solution 2 should be 2x solution 1 (linearity)
-    double tolerance = 1e-12;
+    Float tolerance = 1e-12;
     ASSERT_TRUE(std::abs(sol2[0] - 2.0 * sol1[0]) < tolerance);
     ASSERT_TRUE(std::abs(sol2[1] - 2.0 * sol1[1]) < tolerance);
 }

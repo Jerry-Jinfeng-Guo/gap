@@ -142,7 +142,7 @@ void test_admittance_matrix_branch_iteration() {
 
     // Calculate expected admittance: Y = 1 / (0.02 + j0.06)
     // Complex expected_admittance = Complex(1.0, 0.0) / Complex(0.02, 0.06);
-    // double expected_shunt = 0.05 / 2.0;
+    // Float expected_shunt = 0.05 / 2.0;
 
     // Verify CSR structure: row_ptr should be [0, 2, 4]
     ASSERT_EQ(3, matrix->row_ptr.size());

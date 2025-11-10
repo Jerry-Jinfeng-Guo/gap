@@ -98,8 +98,8 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
                 calculate_mismatches(network_data, result.bus_voltages, admittance_matrix);
 
             // Check convergence
-            double max_mismatch = 0.0;
-            for (double mismatch : mismatches) {
+            Float max_mismatch = 0.0;
+            for (Float mismatch : mismatches) {
                 max_mismatch = std::max(max_mismatch, std::abs(mismatch));
             }
 
@@ -143,13 +143,13 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         std::cout << "GPUNewtonRaphson: GPU LU solver backend set" << std::endl;
     }
 
-    std::vector<double> calculate_mismatches(
+    std::vector<Float> calculate_mismatches(
         NetworkData const& network_data, [[maybe_unused]] ComplexVector const& bus_voltages,
         [[maybe_unused]] SparseMatrix const& admittance_matrix) override {
         // TODO: Implement GPU-based mismatch calculation using CUDA kernels
         std::cout << "GPUNewtonRaphson: Calculating power mismatches on GPU" << std::endl;
 
-        std::vector<double> mismatches;
+        std::vector<Float> mismatches;
 
         // Placeholder implementation using CPU calculation
         // In real implementation:

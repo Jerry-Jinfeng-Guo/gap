@@ -51,9 +51,9 @@ class CPULUSolver : public ILUSolver {
     std::vector<bool> work_marker_;  // Marker array for sparsity detection
 
     // Tolerance for numerical stability
-    static constexpr double pivot_tolerance_ = 1e-14;
-    static constexpr double drop_tolerance_ = 1e-16;
-    static constexpr double growth_factor_limit_ = 1e12;
+    static constexpr Float pivot_tolerance_ = 1e-14;
+    static constexpr Float drop_tolerance_ = 1e-16;
+    static constexpr Float growth_factor_limit_ = 1e12;
 
   public:
     /**
@@ -269,7 +269,7 @@ class CPULUSolver : public ILUSolver {
 
         symbolic_.valid = true;
 
-        double fill_ratio = static_cast<double>(symbolic_.l_nnz + symbolic_.u_nnz) / matrix.nnz;
+        Float fill_ratio = static_cast<Float>(symbolic_.l_nnz + symbolic_.u_nnz) / matrix.nnz;
         LOG_DEBUG(logger, "    L nnz:", symbolic_.l_nnz, ", U nnz:", symbolic_.u_nnz);
         LOG_DEBUG(logger, "    Fill ratio:", fill_ratio, "x");
 
@@ -323,11 +323,11 @@ class CPULUSolver : public ILUSolver {
         }
 
         // Perform LU factorization with scaled partial pivoting for maximum accuracy
-        std::vector<double> scale(matrix_size_);
+        std::vector<Float> scale(matrix_size_);
 
         // Compute scaling factors (largest element in each row)
         for (int i = 0; i < matrix_size_; ++i) {
-            double max_val = 0.0;
+            Float max_val = 0.0;
             for (int j = 0; j < matrix_size_; ++j) {
                 max_val = std::max(max_val, std::abs(dense_work[i][j]));
             }
@@ -338,10 +338,10 @@ class CPULUSolver : public ILUSolver {
         for (int k = 0; k < matrix_size_ - 1; ++k) {
             // Find pivot with scaled partial pivoting
             int pivot_row = k;
-            double max_scaled = std::abs(dense_work[k][k]) / scale[k];
+            Float max_scaled = std::abs(dense_work[k][k]) / scale[k];
 
             for (int i = k + 1; i < matrix_size_; ++i) {
-                double scaled_val = std::abs(dense_work[i][k]) / scale[i];
+                Float scaled_val = std::abs(dense_work[i][k]) / scale[i];
                 if (scaled_val > max_scaled) {
                     max_scaled = scaled_val;
                     pivot_row = i;

@@ -11,11 +11,11 @@ namespace gap::solver {
  * @brief Power flow solver configuration
  */
 struct PowerFlowConfig {
-    double tolerance = 1e-6;           // Convergence tolerance
-    int max_iterations = 50;           // Maximum number of iterations
-    bool use_flat_start = true;        // Use flat start for voltages
-    double acceleration_factor = 1.4;  // Acceleration factor
-    bool verbose = false;              // Enable verbose output
+    Float tolerance = 1e-6;           // Convergence tolerance
+    int max_iterations = 50;          // Maximum number of iterations
+    bool use_flat_start = true;       // Use flat start for voltages
+    Float acceleration_factor = 1.4;  // Acceleration factor
+    bool verbose = false;             // Enable verbose output
 };
 
 /**
@@ -25,7 +25,7 @@ struct PowerFlowResult {
     ComplexVector bus_voltages;           // Bus voltage phasors
     bool converged = false;               // Convergence status
     int iterations = 0;                   // Number of iterations
-    double final_mismatch = 0.0;          // Final mismatch norm
+    Float final_mismatch = 0.0;           // Final mismatch norm
     std::vector<Complex> bus_injections;  // Calculated bus injections
 };
 
@@ -60,9 +60,9 @@ class IPowerFlowSolver {
      * @param admittance_matrix System admittance matrix
      * @return Vector of power mismatches
      */
-    virtual std::vector<double> calculate_mismatches(NetworkData const& network_data,
-                                                     ComplexVector const& bus_voltages,
-                                                     SparseMatrix const& admittance_matrix) = 0;
+    virtual std::vector<Float> calculate_mismatches(NetworkData const& network_data,
+                                                    ComplexVector const& bus_voltages,
+                                                    SparseMatrix const& admittance_matrix) = 0;
 
     /**
      * @brief Get backend type

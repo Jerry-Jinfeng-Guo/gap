@@ -53,7 +53,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
             // Series impedance: Z = r1 + j*x1
             // Series admittance: Y_series = 1/Z = g1_calc + j*b1_calc
             // where g1_calc = r1/(r1^2 + x1^2) and b1_calc = -x1/(r1^2 + x1^2)
-            double z_magnitude_sq = branch.r1 * branch.r1 + branch.x1 * branch.x1;
+            Float z_magnitude_sq = branch.r1 * branch.r1 + branch.x1 * branch.x1;
             Complex series_admittance;
             if (z_magnitude_sq > 1e-12) {  // Avoid division by zero
                 series_admittance =
@@ -87,8 +87,8 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         for (int i = 0; i < network_data.num_buses; ++i) {
             // Sort off-diagonal elements by column index
             std::sort(off_diagonal_elements[i].begin(), off_diagonal_elements[i].end(),
-                      [](const std::pair<int, std::complex<double>>& a,
-                         const std::pair<int, std::complex<double>>& b) {
+                      [](const std::pair<int, std::complex<Float>>& a,
+                         const std::pair<int, std::complex<Float>>& b) {
                           return a.first < b.first;  // Sort by column index only
                       });
 
@@ -145,7 +145,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
 
             // Calculate branch admittance change using new r1, x1, g1, b1 parameters
             Complex series_admittance_change = Complex(0.0, 0.0);
-            double z_magnitude_sq =
+            Float z_magnitude_sq =
                 branch_change.r1 * branch_change.r1 + branch_change.x1 * branch_change.x1;
             if (z_magnitude_sq > 1e-12) {  // Avoid division by zero
                 series_admittance_change =

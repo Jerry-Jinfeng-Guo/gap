@@ -40,6 +40,23 @@ target_link_libraries(gap_validation_tests
     gap_powerflow_cpu
 )
 
+# Debug program for simple 2-bus test case
+add_executable(debug_simple_2bus
+    validation/debug_simple_2bus.cpp
+)
+
+target_include_directories(debug_simple_2bus PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(debug_simple_2bus
+    gap_core
+    gap_io
+    gap_admittance_cpu
+    gap_lu_cpu
+    gap_powerflow_cpu
+)
+
 # Add tests to CTest
 add_test(NAME UnitTests COMMAND gap_unit_tests)
 add_test(NAME ValidationTests COMMAND gap_validation_tests)

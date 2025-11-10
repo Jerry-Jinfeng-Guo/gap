@@ -16,6 +16,7 @@ struct PowerFlowConfig {
     bool use_flat_start = true;       // Use flat start for voltages
     Float acceleration_factor = 1.4;  // Acceleration factor
     bool verbose = false;             // Enable verbose output
+    Float base_power = 100e6;         // Base power for per-unit system (VA), default 100 MVA
 };
 
 /**

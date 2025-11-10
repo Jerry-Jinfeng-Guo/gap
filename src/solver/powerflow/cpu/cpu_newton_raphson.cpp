@@ -23,6 +23,37 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         LOG_DEBUG(logger, "  Number of buses:", network_data.num_buses);
         LOG_DEBUG(logger, "  Tolerance:", config.tolerance);
         LOG_DEBUG(logger, "  Max iterations:", config.max_iterations);
+        LOG_DEBUG(logger, "  Base power:", config.base_power / 1e6, "MVA");
+
+        // === PER-UNIT SYSTEM NORMALIZATION ===
+        // Calculate base impedance: Z_base = V_base² / S_base
+        // For now, assume all buses have the same u_rated (single voltage level)
+        Float v_base = network_data.buses[0].u_rated;                  // Base voltage in Volts
+        Float base_impedance = (v_base * v_base) / config.base_power;  // Ohms
+
+        LOG_INFO(logger, "  Base voltage:", v_base / 1e3, "kV");
+        LOG_INFO(logger, "  Base impedance:", base_impedance, "Ohms");
+        LOG_INFO(logger, "  Base power:", config.base_power / 1e6, "MVA");
+
+        // Create per-unit admittance matrix: Y_pu = Y_siemens × Z_base
+        // The admittance matrix from the builder is in Siemens (Y = 1/Z with Z in Ohms)
+        SparseMatrix y_pu = admittance_matrix;  // Copy structure
+        for (size_t i = 0; i < y_pu.values.size(); ++i) {
+            y_pu.values[i] = admittance_matrix.values[i] * base_impedance;
+        }
+
+        // Debug: Log Y-bus diagonal elements
+        LOG_INFO(logger, "  Y-bus diagonal elements (per-unit):");
+        for (int bus = 0; bus < network_data.num_buses; ++bus) {
+            if (bus < static_cast<int>(y_pu.row_ptr.size() - 1)) {
+                for (int idx = y_pu.row_ptr[bus]; idx < y_pu.row_ptr[bus + 1]; ++idx) {
+                    if (y_pu.col_idx[idx] == bus) {  // Diagonal element
+                        LOG_INFO(logger, "    Y[", bus, ",", bus, "] =", y_pu.values[idx].real(),
+                                 "+j", y_pu.values[idx].imag());
+                    }
+                }
+            }
+        }
 
         PowerFlowResult result;
         result.bus_voltages.resize(network_data.num_buses);
@@ -47,9 +78,9 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                 LOG_DEBUG(logger, "  Iteration", (iter + 1));
             }
 
-            // Calculate mismatches
-            auto mismatches =
-                calculate_mismatches(network_data, result.bus_voltages, admittance_matrix);
+            // Calculate mismatches (uses per-unit Y-bus and base_power)
+            auto mismatches = calculate_mismatches_impl(network_data, result.bus_voltages, y_pu,
+                                                        config.base_power);
 
             // Check convergence
             Float max_mismatch = 0.0;
@@ -69,8 +100,8 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             }
 
             // Build Jacobian matrix and solve Newton's correction equations
-            auto corrections = solve_newton_correction(network_data, mismatches,
-                                                       result.bus_voltages, admittance_matrix);
+            auto corrections =
+                solve_newton_correction(network_data, mismatches, result.bus_voltages, y_pu);
 
             // Update voltage estimates with Newton's method: V = V + ΔV
             update_voltage_estimates(network_data, result.bus_voltages, corrections);
@@ -101,12 +132,35 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     std::vector<Float> calculate_mismatches(NetworkData const& network_data,
                                             ComplexVector const& bus_voltages,
                                             SparseMatrix const& admittance_matrix) override {
+        // Public interface - uses default base_power of 100 MVA
+        return calculate_mismatches_impl(network_data, bus_voltages, admittance_matrix, 100e6);
+    }
+
+  private:
+    std::vector<Float> calculate_mismatches_impl(NetworkData const& network_data,
+                                                 ComplexVector const& bus_voltages,
+                                                 SparseMatrix const& admittance_matrix,
+                                                 Float base_power) {
         LOG_TRACE(logger, "CPUNewtonRaphson: Calculating power mismatches");
 
         std::vector<Float> mismatches;
 
         // Calculate power injections S_i = V_i * conj(I_i) = V_i * conj(Y_bus * V)
+        // If Y-bus is in per-unit, this gives S in per-unit
         auto calculated_powers = calculate_bus_power_injections(bus_voltages, admittance_matrix);
+
+        // Debug: Log power values for first iteration
+        static bool first_call = true;
+        if (first_call) {
+            first_call = false;
+            LOG_INFO(logger, "  === Power injection debug (per-unit) ===");
+            for (size_t i = 0; i < network_data.buses.size(); ++i) {
+                auto specified = get_specified_power_at_bus(network_data, i, base_power);
+                LOG_INFO(logger, "    Bus", (i + 1), "- Calculated:", calculated_powers[i].real(),
+                         "pu,", calculated_powers[i].imag(), "pu | Specified:", specified.real(),
+                         "pu,", specified.imag(), "pu");
+            }
+        }
 
         // Calculate mismatches for each bus equation
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
@@ -115,8 +169,8 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                 continue;
             }
 
-            // Get specified power from appliances connected to this bus
-            auto specified_power = get_specified_power_at_bus(network_data, i);
+            // Get specified power from appliances connected to this bus (in per-unit)
+            auto specified_power = get_specified_power_at_bus(network_data, i, base_power);
 
             // P mismatch: ΔP_i = P_calculated - P_specified (Newton-Raphson standard convention)
             Float p_mismatch = calculated_powers[i].real() - specified_power.real();
@@ -133,8 +187,6 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
 
         return mismatches;
     }
-
-  private:
     /**
      * @brief Calculate power injections at all buses: S = V * conj(Y * V)
      */
@@ -182,13 +234,27 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     }
 
     /**
-     * @brief Get specified power injection at a bus from connected appliances
+     * @brief Get specified power injection at a bus from connected appliances and bus data
+     * @param network_data Network data with bus and appliance information
+     * @param bus_idx Bus index
+     * @param base_power Base power for per-unit conversion (VA)
+     * @return Specified power in per-unit (if base_power provided) or absolute (if 0)
      */
-    Complex get_specified_power_at_bus(NetworkData const& network_data, size_t bus_idx) const {
+    Complex get_specified_power_at_bus(NetworkData const& network_data, size_t bus_idx,
+                                       Float base_power = 0.0) const {
         Complex specified_power(0.0, 0.0);
         int bus_id = network_data.buses[bus_idx].id;
 
-        // Sum power from all appliances connected to this bus using range-based for loop
+        // First, check if power is specified directly on the bus (e.g., from Python bindings)
+        // This takes priority as it's the simplified interface
+        if (network_data.buses[bus_idx].active_power != 0.0 ||
+            network_data.buses[bus_idx].reactive_power != 0.0) {
+            specified_power = Complex(network_data.buses[bus_idx].active_power,
+                                      network_data.buses[bus_idx].reactive_power);
+        }
+
+        // Also sum power from all appliances connected to this bus
+        // (for compatibility with existing test cases that use appliances)
         for (auto const& appliance : network_data.appliances) {
             if (appliance.node == bus_id && appliance.status == 1 &&
                 (appliance.type == ApplianceType::SOURCE ||
@@ -197,6 +263,11 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                 specified_power += Complex(appliance.p_specified, appliance.q_specified);
             }
             // SHUNT appliances are handled in admittance matrix, not as power injections
+        }
+
+        // Convert to per-unit if base_power is provided
+        if (base_power > 0.0) {
+            specified_power /= base_power;
         }
 
         return specified_power;
@@ -303,9 +374,11 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                 Float V_mag = V_mag_old + V_mag_correction;
                 Float V_angle = std::arg(voltages[i]);
 
-                // Keep voltage magnitude in reasonable bounds
-                V_mag = std::max(V_mag, 0.8);  // Minimum voltage magnitude (0.8 p.u.)
-                V_mag = std::min(V_mag, 1.2);  // Maximum voltage magnitude (1.2 p.u.)
+                // Keep voltage magnitude in reasonable bounds (but not too restrictive)
+                V_mag = std::max(
+                    V_mag,
+                    0.5);  // Minimum voltage magnitude (0.5 p.u.) - very permissive for convergence
+                V_mag = std::min(V_mag, 1.5);  // Maximum voltage magnitude (1.5 p.u.)
 
                 voltages[i] = Complex(V_mag * cos(V_angle), V_mag * sin(V_angle));
                 corr_idx++;

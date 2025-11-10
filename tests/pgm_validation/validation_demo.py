@@ -246,6 +246,172 @@ class ValidationPipeline:
 
         return network_data
 
+    def _convert_to_minimal_format(self, network: GAPNetworkData):
+        """
+        Convert GAPNetworkData to minimal API format (simple Python lists).
+
+        Args:
+            network: Parsed network data from PGM
+
+        Returns:
+            tuple: (bus_data, branch_data) where:
+                - bus_data: List of [bus_id, bus_type, voltage_pu, angle_rad, p_mw, q_mvar]
+                - branch_data: List of [from_bus, to_bus, r_pu, x_pu, b_pu]
+        """
+        # Convert buses (Note: bus IDs should be 1-based as per GAP convention)
+        bus_data = []
+        for i in range(network.n_node):
+            bus_id = int(network.node_ids[i])
+
+            # Ensure bus ID is 1-based (GAP expects this)
+            if bus_id == 0:
+                bus_id = i + 1
+
+            # u_rated (rated voltage in Volts)
+            u_rated = float(network.u_rated[i])
+
+            # Determine bus type from sources
+            bus_type = 0  # PQ bus by default
+            if i in network.source_node:
+                bus_type = 2  # SLACK bus type (was using 1, should be 2)
+
+            # Initial voltage (flat start)
+            voltage_pu = 1.0
+            angle_rad = 0.0
+
+            # Set reference voltage for sources
+            if i in network.source_node:
+                source_idx = np.nonzero(network.source_node == i)[0][0]
+                voltage_pu = network.u_ref_pu[source_idx]
+
+            # Calculate net power injection (loads are negative)
+            p_load = 0.0
+            q_load = 0.0
+            if i in network.load_node:
+                load_indices = np.nonzero(network.load_node == i)[0]
+                for load_idx in load_indices:
+                    if network.load_status[load_idx]:
+                        p_load -= network.p_load_pu[load_idx] * network.base_power
+                        q_load -= network.q_load_pu[load_idx] * network.base_power
+
+            bus_data.append(
+                [bus_id, u_rated, bus_type, voltage_pu, angle_rad, p_load, q_load]
+            )
+
+        # Convert branches (ensure from/to buses are 1-based)
+        branch_data = []
+        for i in range(network.n_branch):
+            if network.branch_status[i]:  # Only include active branches
+                branch_id = int(network.branch_ids[i])
+                from_bus = int(network.from_node[i])
+                to_bus = int(network.to_node[i])
+
+                # Ensure 1-based indexing
+                if from_bus == 0:
+                    from_bus = 1
+                if to_bus == 0:
+                    to_bus = 1
+
+                # Convert from per-unit to Ohms (multiply by base impedance)
+                base_impedance = (network.u_rated[0] ** 2) / network.base_power
+                r_ohms = float(network.r_pu[i]) * base_impedance
+                x_ohms = float(network.x_pu[i]) * base_impedance
+                b_siemens = float(network.b_pu[i]) / base_impedance
+
+                branch_data.append(
+                    [branch_id, from_bus, to_bus, r_ohms, x_ohms, b_siemens]
+                )
+
+        return bus_data, branch_data
+
+    def _convert_minimal_result_to_validation_format(
+        self,
+        result: list,
+        original_network: GAPNetworkData,
+        calculation_time: float,
+    ) -> GAPPowerFlowResults:
+        """
+        Convert minimal API results to GAPPowerFlowResults format.
+
+        Args:
+            result: List from solve_simple_power_flow with voltages + metadata
+                   Format: [voltage_results..., metadata_row]
+                   Each voltage: [real, imag, magnitude, angle_rad]
+                   Metadata: [converged(0/1), iterations, final_mismatch, 0]
+            original_network: Original network data for reference
+            calculation_time: Solver execution time
+
+        Returns:
+            GAPPowerFlowResults with voltage solutions and placeholder values
+        """
+        # Extract voltage results and metadata
+        n_bus = len(result) - 1  # Last row is metadata
+        u_pu = np.zeros(n_bus)
+        u_angle_deg = np.zeros(n_bus)
+
+        for i in range(n_bus):
+            _, _, magnitude, angle_rad = result[i]
+            u_pu[i] = magnitude
+            u_angle_deg[i] = np.degrees(angle_rad)
+
+        # Extract metadata
+        metadata = result[-1]
+        converged = bool(metadata[0])
+        iterations = int(metadata[1])
+        final_mismatch = metadata[2]
+
+        u_volt = u_pu * original_network.u_rated[:n_bus]
+
+        # Branch power flows (placeholder - would need post-processing calculation)
+        n_branch = original_network.n_branch
+        p_from_mw = np.zeros(n_branch)
+        q_from_mvar = np.zeros(n_branch)
+        p_to_mw = np.zeros(n_branch)
+        q_to_mvar = np.zeros(n_branch)
+        i_from_a = np.zeros(n_branch)
+        i_to_a = np.zeros(n_branch)
+        loading = np.zeros(n_branch)
+
+        # Load results (from original network)
+        p_load_mw = original_network.p_load_pu * original_network.base_power / 1e6
+        q_load_mvar = original_network.q_load_pu * original_network.base_power / 1e6
+
+        # Source injections (simplified - sum of loads)
+        total_load_p = np.sum(p_load_mw)
+        total_load_q = np.sum(q_load_mvar)
+        p_source_mw = np.array([total_load_p])
+        q_source_mvar = np.array([total_load_q])
+
+        return GAPPowerFlowResults(
+            # Convergence info from metadata
+            converged=converged,
+            n_iterations=iterations,
+            max_mismatch=final_mismatch,
+            calculation_time=calculation_time,
+            # Node results
+            node_ids=original_network.node_ids[:n_bus],
+            u_pu=u_pu,
+            u_angle_deg=u_angle_deg,
+            u_volt=u_volt,
+            # Branch results (placeholder)
+            branch_ids=original_network.branch_ids,
+            p_from_mw=p_from_mw,
+            q_from_mvar=q_from_mvar,
+            p_to_mw=p_to_mw,
+            q_to_mvar=q_to_mvar,
+            i_from_a=i_from_a,
+            i_to_a=i_to_a,
+            loading=loading,
+            # Load results
+            load_ids=original_network.load_ids,
+            p_load_mw=p_load_mw,
+            q_load_mvar=q_load_mvar,
+            # Source results
+            source_ids=original_network.source_ids,
+            p_source_mw=p_source_mw,
+            q_source_mvar=q_source_mvar,
+        )
+
     def _setup_workspace(self):
         """Create validation workspace directory structure."""
         dirs = [
@@ -361,15 +527,12 @@ class ValidationPipeline:
     def _run_gap_solver_real(
         self,
         network: GAPNetworkData,
-        backend_type: str = "CPU",
-        solver_config: Optional[Dict[str, Any]] = None,
     ) -> GAPPowerFlowResults:
         """
-        Run GAP Newton-Raphson solver using Python bindings.
+        Run GAP Newton-Raphson solver using minimal Python bindings.
 
         Args:
             network: Parsed network data
-            output_file: Output file for results
             backend_type: "CPU" or "GPU" for computation backend
             solver_config: Optional solver configuration parameters
 
@@ -379,86 +542,34 @@ class ValidationPipeline:
         if not GAP_AVAILABLE:
             raise RuntimeError(f"GAP solver not available: {GAP_IMPORT_ERROR}")
 
-        # Use GAP's built-in JSON loader instead of manual conversion
-        # Find the JSON file path from the most recent test case
-        json_files = list(self.workspace_dir.rglob("*/input.json"))
-        if not json_files:
-            raise RuntimeError("No input JSON file found for GAP solver")
-
-        # Use the most recent JSON file
-        json_file = max(json_files, key=lambda p: p.stat().st_mtime)
-
+        # Convert network data to minimal API format
         try:
-            # Load network using GAP's built-in JSON parser
-            gap_network_data = gap_solver.load_network_from_json(str(json_file))
+            bus_data, branch_data = self._convert_to_minimal_format(network)
             print(
-                f"     📊 Loaded: {gap_network_data.num_buses} buses, {gap_network_data.num_branches} branches, {gap_network_data.num_appliances} appliances"
+                f"     📊 Converted: {len(bus_data)} buses, {len(branch_data)} branches"
             )
 
         except Exception as e:
-            raise RuntimeError(f"Failed to load network from {json_file}: {e}")
-
-        # Create solver configuration
-        config = gap_solver.PowerFlowConfig()
-        if solver_config:
-            if "tolerance" in solver_config:
-                config.tolerance = solver_config["tolerance"]
-            if "max_iterations" in solver_config:
-                config.max_iterations = solver_config["max_iterations"]
-            if "use_flat_start" in solver_config:
-                config.use_flat_start = solver_config["use_flat_start"]
-            if "verbose" in solver_config:
-                config.verbose = solver_config["verbose"]
-
-        # Select backend and create solver
-        if backend_type.upper() == "GPU" and gap_solver.is_cuda_available():
-            backend = gap_solver.BackendType.GPU_CUDA
-        else:
-            backend = gap_solver.BackendType.CPU
-
-        solver = gap_solver.create_solver(backend)
+            raise RuntimeError(f"Failed to convert network data: {e}")
 
         # Run power flow calculation
         start_time = time.time()
         try:
-            # Use the new simplified API that builds admittance matrix internally
-            result = solver.solve_power_flow(gap_network_data, config)
+            # Use the new minimal API with simple Python types
+            voltages = gap_solver.solve_simple_power_flow(bus_data, branch_data)
 
             calculation_time = time.time() - start_time
 
             # Convert results to validation format
-            return self._convert_gap_result_to_validation_format(
-                result, network, calculation_time
+            return self._convert_minimal_result_to_validation_format(
+                voltages, network, calculation_time
             )
 
         except Exception as ex:
             calculation_time = time.time() - start_time
-            error_msg = str(ex)
-
-            # Check if this is still the old SparseMatrix binding issue
-            if (
-                "gap::SparseMatrix" in error_msg
-                and "incompatible function arguments" in error_msg
-            ):
-                print("     ⚠️  GAP solver binding issue detected:")
-                print(
-                    "        The GAP solver requires a SparseMatrix type that is not exposed to Python."
-                )
-                print(
-                    "        This is a known limitation that needs to be fixed in the C++ bindings."
-                )
-                print("        For now, using synthetic solver results for comparison.")
-
-                # Fall back to synthetic solver for this test
-                # Need to create a dummy output file for synthetic solver
-                from pathlib import Path
-
-                dummy_output = Path("dummy_gap_output.json")
-                return self._run_gap_solver_synthetic(network, dummy_output)
-            else:
-                print(f"     ❌ GAP solver failed: {ex}")
-                # Return failed result for analysis
-                return self._create_failed_gap_result(network, calculation_time)
+            print(f"     ❌ GAP solver failed: {ex}")
+            # Return failed result for analysis
+            return self._create_failed_gap_result(network, calculation_time)
 
     def _convert_gap_result_to_validation_format(
         self,

@@ -137,6 +137,16 @@ void init_solver_bindings(pybind11::module& m) {
                     throw std::runtime_error("Failed to create CPU solver");
                 }
 
+                // Create LU solver backend
+                std::shared_ptr<solver::ILUSolver> lu_solver(
+                    core::BackendFactory::create_lu_solver(BackendType::CPU).release());
+                if (!lu_solver) {
+                    throw std::runtime_error("Failed to create CPU LU solver");
+                }
+
+                // Set LU solver on the powerflow solver
+                solver->set_lu_solver(lu_solver);
+
                 auto admittance_builder =
                     core::BackendFactory::create_admittance_backend(BackendType::CPU);
                 if (!admittance_builder) {

@@ -119,7 +119,7 @@ done
 
 # Print configuration header
 echo "======================================"
-echo "GAP Unified Build Script"
+echo "        GAP Unified Build Script      "
 echo "======================================"
 echo "Configuration:"
 echo "  CUDA support: $ENABLE_CUDA"

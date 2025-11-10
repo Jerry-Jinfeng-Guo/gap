@@ -1,7 +1,14 @@
 # Build directories
 build/
+build_*/
 build-*/
 cmake-build-*/
+
+# Specific build directories used by GAP
+build_cuda/
+build_test/
+build_debug/
+build_release/
 
 # Generated files
 *.o
@@ -57,6 +64,18 @@ __pycache__/
 *.pyd
 .Python
 *.so
+
+# Python virtual environments
+.venv/
+venv/
+.env/
+env/
+ENV/
+
+# Python package builds
+dist/
+build_python/
+*.egg-info/
 
 # CUDA
 *.cubin

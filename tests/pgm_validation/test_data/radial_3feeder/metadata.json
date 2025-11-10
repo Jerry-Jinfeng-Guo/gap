@@ -1,0 +1,11 @@
+{
+  "n_node": 13,
+  "n_line": 12,
+  "n_load": 12,
+  "n_feeder": 3,
+  "n_node_per_feeder": 4,
+  "seed": 42,
+  "topology": "radial",
+  "frequency": 50.0,
+  "base_voltage": 10000.0
+}

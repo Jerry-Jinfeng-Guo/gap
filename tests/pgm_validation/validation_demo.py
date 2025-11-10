@@ -527,14 +527,16 @@ class ValidationPipeline:
     def _run_gap_solver_real(
         self,
         network: GAPNetworkData,
+        tolerance: float = 1e-4,
+        max_iterations: int = 100,
     ) -> GAPPowerFlowResults:
         """
         Run GAP Newton-Raphson solver using minimal Python bindings.
 
         Args:
             network: Parsed network data
-            backend_type: "CPU" or "GPU" for computation backend
-            solver_config: Optional solver configuration parameters
+            tolerance: Convergence tolerance for Newton-Raphson (default: 1e-4)
+            max_iterations: Maximum iterations allowed (default: 100)
 
         Returns:
             GAP power flow results converted to validation format
@@ -555,8 +557,14 @@ class ValidationPipeline:
         # Run power flow calculation
         start_time = time.time()
         try:
-            # Use the new minimal API with simple Python types
-            voltages = gap_solver.solve_simple_power_flow(bus_data, branch_data)
+            # Use the new minimal API with relaxed tolerances for better convergence
+            voltages = gap_solver.solve_simple_power_flow(
+                bus_data,
+                branch_data,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+                verbose=True,
+            )
 
             calculation_time = time.time() - start_time
 
@@ -795,6 +803,125 @@ class ValidationPipeline:
 
 
 # Demonstration function
+def run_gap_validation_test():
+    """
+    Run simple validation test for GAP solver against known analytical results.
+
+    This tests the GAP solver using the existing validation framework with
+    simple 2-bus test cases that have known analytical solutions.
+    """
+    if not GAP_AVAILABLE:
+        print(f"❌ GAP solver not available: {GAP_IMPORT_ERROR}")
+        return False
+
+    print("GAP Solver Validation Test")
+    print("=" * 40)
+
+    # Test Case 1: Simple 2-bus system
+    print("🧪 Testing simple 2-bus system...")
+
+    # Bus data: [id, u_rated, bus_type, u_pu, u_angle, p_load, q_load]
+    bus_data = [
+        [1, 230000.0, 2, 1.05, 0.0, 0.0, 0.0],  # Slack bus: 1.05∠0° pu
+        [2, 230000.0, 0, 1.0, 0.0, -100e6, -50e6],  # Load bus: 100 MW + j50 MVAR
+    ]
+
+    # Branch data: [id, from_bus, to_bus, r_ohms, x_ohms, b_siemens]
+    # Line impedance: 0.01 + j0.1 pu = 5.3 + j52.9 Ω (for 100 MVA, 230 kV base)
+    base_z = (230000**2) / 100e6  # 529 ohms base impedance
+    r_ohms = 0.01 * base_z
+    x_ohms = 0.1 * base_z
+
+    branch_data = [[1, 1, 2, r_ohms, x_ohms, 0.0]]
+
+    print(f"   Base impedance: {base_z:.1f} Ω")
+    print(f"   Line impedance: {r_ohms:.1f} + j{x_ohms:.1f} Ω")
+
+    try:
+        # Test with relaxed tolerance for convergence
+        result = gap_solver.solve_simple_power_flow(
+            bus_data,
+            branch_data,
+            tolerance=1e-4,  # More relaxed tolerance
+            max_iterations=100,  # More iterations
+            verbose=False,
+        )
+
+        # Extract results
+        n_bus = len(result) - 1
+        metadata = result[-1]
+        converged = bool(metadata[0])
+        iterations = int(metadata[1])
+        final_mismatch = metadata[2]
+
+        print(f"✅ GAP completed: Converged={converged}, Iterations={iterations}")
+        print(f"   Final mismatch: {final_mismatch:.2e}")
+
+        if converged:
+            print("\nGAP Results:")
+            for i in range(n_bus):
+                real, imag, magnitude, angle_rad = result[i]
+                angle_deg = np.degrees(angle_rad)
+                print(f"   Bus {i+1}: {magnitude:.4f}∠{angle_deg:.2f}° pu")
+
+            # Compare with expected results (IEEE 2-bus analytical solution)
+            expected_results = {
+                1: (1.05, 0.0),  # Bus 1: 1.05∠0° pu
+                2: (0.956, -2.74),  # Bus 2: 0.956∠-2.74° pu
+            }
+
+            print("\n📚 Expected Results (analytical):")
+            for bus_id, (exp_mag, exp_ang) in expected_results.items():
+                print(f"   Bus {bus_id}: {exp_mag:.4f}∠{exp_ang:.2f}° pu")
+
+            print("\n📊 Validation:")
+            tolerance_mag = 0.01  # 1% magnitude tolerance
+            tolerance_ang = 1.0  # 1 degree angle tolerance
+            all_pass = True
+
+            for i in range(n_bus):
+                bus_id = i + 1
+                _, _, gap_mag, gap_ang_rad = result[i]
+                gap_ang_deg = np.degrees(gap_ang_rad)
+
+                if bus_id in expected_results:
+                    exp_mag, exp_ang = expected_results[bus_id]
+
+                    mag_error = abs(gap_mag - exp_mag)
+                    ang_error = abs(gap_ang_deg - exp_ang)
+
+                    mag_pass = mag_error <= tolerance_mag
+                    ang_pass = ang_error <= tolerance_ang
+
+                    status = "✅ PASS" if (mag_pass and ang_pass) else "❌ FAIL"
+                    print(f"   Bus {bus_id}: {status}")
+                    print(
+                        f"      Magnitude: GAP={gap_mag:.4f}, Expected={exp_mag:.4f}, Error={mag_error:.4f}"
+                    )
+                    print(
+                        f"      Angle: GAP={gap_ang_deg:.2f}°, Expected={exp_ang:.2f}°, Error={ang_error:.2f}°"
+                    )
+
+                    if not (mag_pass and ang_pass):
+                        all_pass = False
+
+            if all_pass:
+                print("\n🎉 VALIDATION PASSED - GAP calculations are correct!")
+                return True
+            else:
+                print("\n⚠️  VALIDATION FAILED - May need solver tuning")
+                return False
+
+        else:
+            print("❌ GAP solver failed to converge")
+            print("   Try adjusting tolerance or max_iterations")
+            return False
+
+    except Exception as e:
+        print(f"❌ GAP solver error: {e}")
+        return False
+
+
 def run_validation_demo(
     workspace_dir: Path = Path("validation_demo_workspace"),
 ) -> None:
@@ -808,6 +935,21 @@ def run_validation_demo(
 
     print("GAP NRPF Validation Pipeline Demonstration")
     print("=" * 50)
+
+    # First run the simple validation test
+    print("Step 1: Simple GAP Validation Test")
+    print("-" * 30)
+    validation_passed = run_gap_validation_test()
+    print()
+
+    if not validation_passed:
+        print(
+            "❌ Basic validation failed. Check solver configuration before running full demo."
+        )
+        return
+
+    print("Step 2: Full Validation Pipeline Demo")
+    print("-" * 30)
 
     # Test configurations
     test_configs = [

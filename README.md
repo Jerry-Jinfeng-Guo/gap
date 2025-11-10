@@ -43,6 +43,31 @@ GAP (GPU-Accelerated Power flow) is a modern C++20 power flow solver designed fo
 - **CPU Backend**: Optimized C++ with enhanced sparse linear algebra and CSR format validation
 - **GPU Backend**: CUDA-accelerated with cuBLAS, cuSPARSE, and cuSOLVER integration
 
+### Python Bindings
+
+GAP provides Python bindings through **pybind11** for seamless integration with Python scientific workflows:
+
+- **Flexible Module Detection**: Automatically searches multiple build directories (build_cuda, build, build_release, build_debug)
+- **Environment Override**: Set `GAP_MODULE_PATH` for custom module locations
+- **Backend Selection**: CPU/GPU backend choice at runtime
+- **PGM Integration**: Full compatibility with Power Grid Model data structures
+
+**Check Module Status:**
+```bash
+# Verify GAP Python module availability
+python scripts/check_gap_module.py
+
+# Custom module path
+GAP_MODULE_PATH=/custom/path python scripts/check_gap_module.py
+```
+
+**Module Search Order:**
+1. Installed Python package (`pip install gap-solver`)
+2. `GAP_MODULE_PATH` environment variable
+3. Build directories: `build_cuda/lib`, `build/lib`, `build_release/lib`, `build_debug/lib`
+
+See `bindings/README.md` for complete Python API documentation.
+
 ## Requirements
 
 ### Minimum Requirements

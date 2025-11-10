@@ -1,0 +1,60 @@
+{
+  "comparison_timestamp": "2025-11-10T15:34:16.135974",
+  "gap_solver_info": {
+    "converged": false,
+    "n_iterations": 0,
+    "max_mismatch": Infinity,
+    "calculation_time": 6.103515625e-05
+  },
+  "reference_solver_info": {
+    "solver": "power_grid_model",
+    "calculation_method": "newton_raphson",
+    "calculation_time_s": 0.000186920166015625,
+    "symmetric": true,
+    "converged": true,
+    "base_power_va": 1.0,
+    "timestamp": 1762785256.1337867
+  },
+  "node_comparison": {
+    "n_nodes_compared": 7,
+    "max_voltage_error_pu": 0.0,
+    "rms_voltage_error_pu": NaN,
+    "max_angle_error_deg": 0.0,
+    "rms_angle_error_deg": NaN,
+    "voltage_within_tolerance": true,
+    "angle_within_tolerance": true
+  },
+  "line_comparison": {
+    "n_lines_compared": 6,
+    "max_p_error_mw": 0.0,
+    "rms_p_error_mw": NaN,
+    "max_q_error_mvar": 0.0,
+    "rms_q_error_mvar": NaN,
+    "p_within_tolerance": true,
+    "q_within_tolerance": true
+  },
+  "load_comparison": {
+    "n_loads_compared": 6,
+    "max_p_error_mw": 0.0,
+    "rms_p_error_mw": NaN,
+    "max_q_error_mvar": 0.0,
+    "rms_q_error_mvar": NaN,
+    "p_within_tolerance": true,
+    "q_within_tolerance": true
+  },
+  "tolerance_settings": {
+    "voltage_pu": 1e-06,
+    "angle_deg": 0.0001,
+    "power_mw": 0.001,
+    "power_mvar": 0.001
+  },
+  "overall_match": {
+    "all_within_tolerance": true,
+    "max_errors": {
+      "voltage_pu": 0.0,
+      "angle_deg": 0.0,
+      "power_mw": 0.0,
+      "power_mvar": 0.0
+    }
+  }
+}

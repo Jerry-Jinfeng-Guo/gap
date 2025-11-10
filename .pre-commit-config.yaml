@@ -6,7 +6,23 @@ repos:
         entry: clang-format
         language: system
         files: \.(cpp|cc|cxx|c|hpp|hh|h|cu|cuh)$
-        args: [--style=file, -i]# Configuration
+        args: [--style=file, -i]
+  
+  # Python formatting
+  - repo: https://github.com/psf/black
+    rev: '23.11.0'
+    hooks:
+      - id: black
+        language_version: python3
+        args: [--line-length=88]
+  
+  - repo: https://github.com/pycqa/isort
+    rev: '5.12.0'
+    hooks:
+      - id: isort
+        args: [--profile, black]
+
+# Configuration
 ci:
     autofix_commit_msg: |
         [pre-commit.ci] auto fixes from pre-commit hooks

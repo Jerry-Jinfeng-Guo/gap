@@ -12,6 +12,7 @@ __email__ = "gap@powerflow.com"
 # Import the compiled C++ extension
 try:
     from .gap_solver import *
+
     _cpp_module_available = True
 except ImportError as e:
     _cpp_module_available = False
@@ -27,22 +28,15 @@ if not _cpp_module_available:
     )
 
 # Convenience imports and version info
-from .gap_solver import (
-    # Core types
-    BackendType,
-    BusType,
+from .gap_solver import (  # Core types; Data structures; Solvers (availability depends on build configuration); Factory functions
     ApplianceType,
+    BackendType,
     BranchType,
-    
-    # Data structures
+    BusType,
+    CPUNewtonRaphson,
+    NetworkData,
     PowerFlowConfig,
     PowerFlowResult,
-    NetworkData,
-    
-    # Solvers (availability depends on build configuration)
-    CPUNewtonRaphson,
-    
-    # Factory functions
     create_solver,
     get_available_backends,
     is_cuda_available,
@@ -51,9 +45,11 @@ from .gap_solver import (
 # Conditional CUDA imports
 try:
     from .gap_solver import GPUNewtonRaphson
+
     _cuda_available = True
 except ImportError:
     _cuda_available = False
+
 
 # Module information
 def get_build_info():
@@ -66,6 +62,7 @@ def get_build_info():
     }
     return info
 
+
 def print_build_info():
     """Print GAP build information."""
     info = get_build_info()
@@ -74,27 +71,24 @@ def print_build_info():
     print(f"CUDA Support: {'Available' if info['cuda_available'] else 'Not Available'}")
     print(f"Available Backends: {', '.join([str(b) for b in info['backends']])}")
 
+
 # For backwards compatibility and convenience
 __all__ = [
     # Version info
     "__version__",
-    "get_build_info", 
+    "get_build_info",
     "print_build_info",
-    
     # Core enums
     "BackendType",
-    "BusType", 
+    "BusType",
     "ApplianceType",
     "BranchType",
-    
     # Data structures
     "PowerFlowConfig",
-    "PowerFlowResult", 
+    "PowerFlowResult",
     "NetworkData",
-    
     # Solver classes
     "CPUNewtonRaphson",
-    
     # Factory functions
     "create_solver",
     "get_available_backends",

@@ -291,10 +291,36 @@ gap/
 4. Add corresponding tests
 
 ### Code Style
+
+#### C++ Code
 - Modern C++20 features encouraged
 - RAII and smart pointers for memory management
 - Clear interface segregation
 - Comprehensive error handling
+- Use `clang-format` with the provided `.clang-format` configuration
+
+#### Python Code
+- **Black**: Code formatting with 88 character line limit
+- **isort**: Import statement organization
+- **Type hints**: Encouraged for public APIs
+- **Docstrings**: Follow Google/NumPy style conventions
+
+#### Automated Formatting
+The project uses pre-commit hooks for automatic code formatting:
+
+```bash
+# Install pre-commit hooks (one-time setup)
+.venv/bin/pre-commit install
+
+# Format Python code manually
+./scripts/format-python.sh
+
+# Format C++ code manually  
+./scripts/format.sh
+
+# Check all formatting
+.venv/bin/pre-commit run --all-files
+```
 
 ## Performance
 

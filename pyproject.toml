@@ -46,6 +46,7 @@ dev = [
     "pytest>=6.0",
     "pytest-benchmark",
     "black",
+    "isort",
     "flake8",
     "mypy"
 ]
@@ -69,8 +70,34 @@ package-dir = {"gap" = "bindings"}
 gap = ["*.so", "*.dll", "*.dylib", "*.pyd"]
 
 [tool.black]
-line-length = 100
-target-version = ['py38']
+line-length = 88
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88
+force_sort_within_sections = true
+known_first_party = ["gap_solver", "pgm_validation"]
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
 [tool.mypy]
 python_version = "3.8"

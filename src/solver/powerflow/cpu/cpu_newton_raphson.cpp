@@ -18,7 +18,6 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     PowerFlowResult solve_power_flow(NetworkData const& network_data,
                                      SparseMatrix const& admittance_matrix,
                                      PowerFlowConfig const& config) override {
-        // TODO: Implement CPU-based Newton-Raphson power flow solver
         logger.setComponent("CPUNewtonRaphson");
         LOG_INFO(logger, "Starting power flow solution");
         LOG_DEBUG(logger, "  Number of buses:", network_data.num_buses);

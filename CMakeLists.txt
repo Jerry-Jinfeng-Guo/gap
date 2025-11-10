@@ -117,12 +117,77 @@ if(GAP_ENABLE_CUDA)
     endif()
 endif()
 
+# Python bindings option
+option(GAP_BUILD_PYTHON_BINDINGS "Build Python bindings using pybind11" ON)
+
+# Find and configure pybind11 if Python bindings are enabled
+if(GAP_BUILD_PYTHON_BINDINGS)
+    # Find Python interpreter and development components
+    find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+    
+    # Try to find pybind11 via Python first (more reliable for virtual environments)
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}" -c "import pybind11; print(pybind11.get_cmake_dir())"
+        RESULT_VARIABLE pybind11_RESULT
+        OUTPUT_VARIABLE pybind11_CMAKE_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    
+    if(pybind11_RESULT EQUAL 0 AND pybind11_CMAKE_DIR)
+        message(STATUS "Found pybind11 via Python: ${pybind11_CMAKE_DIR}")
+        set(CMAKE_PREFIX_PATH "${pybind11_CMAKE_DIR};${CMAKE_PREFIX_PATH}")
+        set(pybind11_FOUND_VIA_PYTHON TRUE)
+    else()
+        message(STATUS "pybind11 not found via Python (${Python3_EXECUTABLE})")
+        set(pybind11_FOUND_VIA_PYTHON FALSE)
+    endif()
+    
+    # Find pybind11 via CMake CONFIG
+    find_package(pybind11 CONFIG QUIET)
+    
+    if(pybind11_FOUND)
+        if(pybind11_FOUND_VIA_PYTHON)
+            message(STATUS "✓ pybind11 found via Python and CMake CONFIG")
+        else()
+            message(STATUS "✓ pybind11 found via CMake CONFIG (system installation)")
+        endif()
+    else()
+        message(STATUS "pybind11 not found via CMake CONFIG, fetching from GitHub...")
+        include(FetchContent)
+        FetchContent_Declare(
+            pybind11
+            GIT_REPOSITORY https://github.com/pybind/pybind11
+            GIT_TAG        v2.11.1  # Use stable version
+        )
+        FetchContent_MakeAvailable(pybind11)
+        message(STATUS "✓ pybind11 fetched from GitHub")
+    endif()
+    
+    message(STATUS "Python bindings configuration:")
+    message(STATUS "  Python executable: ${Python3_EXECUTABLE}")
+    message(STATUS "  Python version: ${Python3_VERSION}")
+    message(STATUS "  pybind11 version: ${pybind11_VERSION}")
+    if(pybind11_FOUND_VIA_PYTHON)
+        message(STATUS "  pybind11 source: Python virtual environment")
+    elseif(pybind11_FOUND)
+        message(STATUS "  pybind11 source: System CMake")
+    else()
+        message(STATUS "  pybind11 source: GitHub (FetchContent)")
+    endif()
+endif()
+
 # Enable testing
 enable_testing()
 
 # Add subdirectories
 add_subdirectory(src)
 add_subdirectory(tests)
+
+# Add Python bindings subdirectory if enabled
+if(GAP_BUILD_PYTHON_BINDINGS)
+    add_subdirectory(bindings)
+endif()
 
 # Optional: Install rules
 install(TARGETS gap_main

@@ -1,0 +1,79 @@
+[build-system]
+requires = [
+    "pybind11>=2.10.0",
+    "setuptools>=45",
+    "wheel",
+    "cmake>=3.18",
+    "ninja; platform_system!='Windows'"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gap-solver"
+version = "1.0.0"
+description = "GAP: GPU-Accelerated Power Flow Calculator - Python Bindings"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "GAP Development Team", email = "gap@powerflow.com"}
+]
+keywords = ["power flow", "power system", "newton-raphson", "gpu", "cuda", "electrical engineering"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: C++",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.19.0",
+    "scipy>=1.6.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-benchmark",
+    "black",
+    "flake8",
+    "mypy"
+]
+validation = [
+    "power-grid-model>=1.9.0",
+    "matplotlib>=3.3.0",
+    "pandas>=1.2.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/Jerry-Jinfeng-Guo/gap"
+Repository = "https://github.com/Jerry-Jinfeng-Guo/gap"
+Documentation = "https://github.com/Jerry-Jinfeng-Guo/gap/wiki"
+Issues = "https://github.com/Jerry-Jinfeng-Guo/gap/issues"
+
+[tool.setuptools]
+packages = ["gap"]
+package-dir = {"gap" = "bindings"}
+
+[tool.setuptools.package-data]
+gap = ["*.so", "*.dll", "*.dylib", "*.pyd"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

@@ -276,7 +276,8 @@ gap/
 │   └── solver/           # Solver interfaces
 ├── tests/                 # Comprehensive test suite (28 tests)
 │   ├── unit/             # Unit tests with PGM validation
-│   └── validation/       # Validation tests
+│   ├── validation/       # Validation tests
+│   └── pgm_validation/   # Validation of power flow calculations with PGM as reference
 ├── data/                  # PGM test data files
 │   └── pgm/              # Power Grid Model JSON files
 └── docs/                  # Documentation

@@ -7,6 +7,10 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <memory>
+#include <stdexcept>
+
+#include "gap/admittance/admittance_interface.h"
 #include "gap/core/backend_factory.h"
 #include "gap/solver/powerflow_interface.h"
 
@@ -48,29 +52,125 @@ void init_solver_bindings(pybind11::module& m) {
                    " buses=" + std::to_string(r.bus_voltages.size()) + ">";
         });
 
-    // Abstract power flow solver interface
-    py::class_<IPowerFlowSolver>(m, "IPowerFlowSolver")
-        .def("solve_power_flow", &IPowerFlowSolver::solve_power_flow,
-             "Solve power flow using Newton-Raphson method", py::arg("network_data"),
-             py::arg("admittance_matrix"), py::arg("config") = PowerFlowConfig{})
-        .def("calculate_mismatches", &IPowerFlowSolver::calculate_mismatches,
-             "Calculate power mismatches", py::arg("network_data"), py::arg("bus_voltages"),
-             py::arg("admittance_matrix"))
-        .def("get_backend_type", &IPowerFlowSolver::get_backend_type, "Get backend execution type");
-
-    // Factory functions for solver creation
+    // Ultra-minimal API using only basic Python types (lists and numbers)
     m.def(
-        "create_cpu_newton_raphson",
-        []() { return core::BackendFactory::create_powerflow_solver(BackendType::CPU); },
-        "Create CPU Newton-Raphson power flow solver");
+        "solve_simple_power_flow",
+        [](const std::vector<std::vector<double>>& bus_data,
+           const std::vector<std::vector<double>>& branch_data, double tolerance = 1e-6,
+           int max_iterations = 50, bool verbose = false) -> std::vector<std::vector<double>> {
+            try {
+                // Convert basic types to internal structures
+                NetworkData network_data;
 
-#if GAP_CUDA_AVAILABLE
-    m.def(
-        "create_gpu_newton_raphson",
-        []() { return core::BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA); },
-        "Create GPU (CUDA) Newton-Raphson power flow solver");
-#endif
+                // Parse bus data
+                network_data.buses.reserve(bus_data.size());
+                for (size_t i = 0; i < bus_data.size(); ++i) {
+                    if (bus_data[i].size() < 7) {
+                        throw std::runtime_error(
+                            "Bus data must have at least 7 elements: [id, u_rated, bus_type, u_pu, "
+                            "u_angle, p, q]");
+                    }
 
-    // Convenience solver classes that can be directly instantiated
-    // Note: These will be defined in separate CPU/GPU specific binding files
+                    BusData bus;
+                    bus.id = static_cast<int>(bus_data[i][0]);
+                    bus.u_rated = bus_data[i][1];
+                    bus.bus_type = static_cast<BusType>(static_cast<int>(bus_data[i][2]));
+                    bus.energized = true;
+                    bus.u_pu = bus_data[i][3];
+                    bus.u_angle = bus_data[i][4];
+                    bus.active_power = bus_data[i][5];
+                    bus.reactive_power = bus_data[i][6];
+
+                    network_data.buses.push_back(bus);
+                }
+
+                // Parse branch data
+                network_data.branches.reserve(branch_data.size());
+                for (size_t i = 0; i < branch_data.size(); ++i) {
+                    if (branch_data[i].size() < 5) {
+                        throw std::runtime_error(
+                            "Branch data must have at least 5 elements: [id, from_bus, to_bus, r, "
+                            "x]");
+                    }
+
+                    BranchData branch;
+                    branch.id = static_cast<int>(branch_data[i][0]);
+                    branch.from_bus = static_cast<int>(branch_data[i][1]);
+                    branch.to_bus = static_cast<int>(branch_data[i][2]);
+                    branch.status = true;
+                    branch.r1 = branch_data[i][3];
+                    branch.x1 = branch_data[i][4];
+                    branch.b1 = (branch_data[i].size() > 5) ? branch_data[i][5] : 0.0;
+
+                    network_data.branches.push_back(branch);
+                }
+
+                network_data.num_buses = network_data.buses.size();
+                network_data.num_branches = network_data.branches.size();
+                network_data.num_appliances = 0;
+
+                // Create solver configuration
+                PowerFlowConfig config;
+                config.tolerance = tolerance;
+                config.max_iterations = max_iterations;
+                config.verbose = verbose;
+
+                // Create CPU solver and solve
+                auto solver = core::BackendFactory::create_powerflow_solver(BackendType::CPU);
+                if (!solver) {
+                    throw std::runtime_error("Failed to create CPU solver");
+                }
+
+                auto admittance_builder =
+                    core::BackendFactory::create_admittance_backend(BackendType::CPU);
+                if (!admittance_builder) {
+                    throw std::runtime_error("Failed to create CPU admittance builder");
+                }
+
+                auto admittance_matrix = admittance_builder->build_admittance_matrix(network_data);
+                if (!admittance_matrix) {
+                    throw std::runtime_error("Failed to build admittance matrix");
+                }
+
+                auto result = solver->solve_power_flow(network_data, *admittance_matrix, config);
+
+                // Convert result to basic Python types
+                std::vector<std::vector<double>> output;
+                for (const auto& voltage : result.bus_voltages) {
+                    output.push_back(
+                        {voltage.real(), voltage.imag(), std::abs(voltage), std::arg(voltage)});
+                }
+
+                // Add metadata as last row: [converged, iterations, final_mismatch, 0]
+                output.push_back({
+                    result.converged ? 1.0 : 0.0, static_cast<double>(result.iterations),
+                    result.final_mismatch,
+                    0.0  // reserved
+                });
+
+                return output;
+
+            } catch (const std::exception& e) {
+                throw std::runtime_error(std::string("Simple power flow solution failed: ") +
+                                         e.what());
+            }
+        },
+        "Solve power flow using only basic Python types (ultra-minimal API)", py::arg("bus_data"),
+        py::arg("branch_data"), py::arg("tolerance") = 1e-6, py::arg("max_iterations") = 50,
+        py::arg("verbose") = false,
+        R"(
+          Solve power flow using only basic Python lists and numbers.
+          
+          Args:
+              bus_data: List of bus data, each bus: [id, u_rated, bus_type, u_pu, u_angle, p_load, q_load]
+                       bus_type: 0=PQ, 1=PV, 2=SLACK
+              branch_data: List of branch data, each branch: [id, from_bus, to_bus, r, x, b(optional)]
+              tolerance: Convergence tolerance (default: 1e-6)
+              max_iterations: Maximum iterations (default: 50)
+              verbose: Enable verbose output (default: False)
+          
+          Returns:
+              List of voltage results, each voltage: [real, imag, magnitude, angle_rad]
+              Last row contains metadata: [converged(0/1), iterations, final_mismatch, 0]
+          )");
 }

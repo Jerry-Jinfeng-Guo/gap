@@ -9,6 +9,8 @@ build_cuda/
 build_test/
 build_debug/
 build_release/
+test_workspace/
+test_workspace_flexible/
 
 # Generated files
 *.o

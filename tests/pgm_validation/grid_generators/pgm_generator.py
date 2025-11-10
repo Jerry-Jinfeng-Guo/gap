@@ -275,27 +275,40 @@ class PGMGridGenerator:
         self, grid_data: Dict[str, Any], output_path: Path
     ) -> None:
         """
-        Export grid data to Power Grid Model JSON format.
+        Export grid data to Power Grid Model JSON format compatible with GAP solver.
 
         Args:
             grid_data: Grid data from generate_symmetric_radial_grid()
             output_path: Output file path for JSON
         """
+        # Create PGM-compliant format with proper structure
         pgm_dataset = {
-            "node": grid_data["nodes"].to_dict("records"),
-            "line": grid_data["lines"].to_dict("records"),
-            "sym_load": grid_data["loads"].to_dict("records"),
-            "source": [grid_data["source"]],
+            "version": "1.0",
+            "type": "input",
+            "is_batch": False,
+            "attributes": {},
+            "data": {
+                "node": grid_data["nodes"].to_dict("records"),
+                "line": grid_data["lines"].to_dict("records"),
+                "sym_load": grid_data["loads"].to_dict("records"),
+                "source": [grid_data["source"]],
+            },
         }
 
         # Add load profiles as update dataset if time series data exists
         if grid_data["load_profiles"]["time_steps"].size > 1:
             pgm_update = {
-                "sym_load": {
-                    "id": grid_data["load_profiles"]["load_ids"],
-                    "p_specified": grid_data["load_profiles"]["p_specified"],
-                    "q_specified": grid_data["load_profiles"]["q_specified"],
-                }
+                "version": "1.0",
+                "type": "update",
+                "is_batch": False,
+                "attributes": {},
+                "data": {
+                    "sym_load": {
+                        "id": grid_data["load_profiles"]["load_ids"],
+                        "p_specified": grid_data["load_profiles"]["p_specified"],
+                        "q_specified": grid_data["load_profiles"]["q_specified"],
+                    }
+                },
             }
         else:
             pgm_update = None

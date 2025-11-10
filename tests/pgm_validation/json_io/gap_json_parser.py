@@ -115,13 +115,19 @@ class PGMJSONParser:
             with open(update_file, "r") as f:
                 update_data = json.load(f)
 
+        # Handle PGM format with "data" wrapper
+        if "data" in input_data:
+            network_data = input_data["data"]
+        else:
+            network_data = input_data
+
         # Parse components
-        nodes_data = self._parse_nodes(input_data.get("node", []))
-        lines_data = self._parse_lines(input_data.get("line", []), nodes_data)
+        nodes_data = self._parse_nodes(network_data.get("node", []))
+        lines_data = self._parse_lines(network_data.get("line", []), nodes_data)
         loads_data = self._parse_loads(
-            input_data.get("sym_load", []), nodes_data, update_data
+            network_data.get("sym_load", []), nodes_data, update_data
         )
-        sources_data = self._parse_sources(input_data.get("source", []), nodes_data)
+        sources_data = self._parse_sources(network_data.get("source", []), nodes_data)
 
         # Calculate base values
         base_voltage = nodes_data["u_rated"].max()  # Use max voltage as base

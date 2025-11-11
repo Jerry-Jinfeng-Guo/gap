@@ -23,162 +23,83 @@ from grid_generators.pgm_generator import PGMGridGenerator
 from reference_solutions.pgm_reference import PGM_AVAILABLE, PGMReferenceSolver
 
 
-def generate_simple_2bus_test():
-    """Generate the simplest possible test case: 2-bus system."""
-    print("📝 Generating Simple 2-Bus Test Case")
-    print("=" * 50)
+def generate_radial_network_test(n_feeder: int, n_node_per_feeder: int, seed: int = 42):
+    """Generate a radial network test case with specified parameters."""
+    test_name = f"radial_{n_feeder}feeder_{n_node_per_feeder}nodepf"
 
-    # Create test data directory
-    test_dir = Path(__file__).parent / "test_data" / "simple_2bus"
-    test_dir.mkdir(parents=True, exist_ok=True)
-
-    # Manually create a simple 2-bus network in PGM format
-    # This avoids any generator complexity
-
-    base_power = 100e6  # 100 MVA
-    base_voltage = 230000  # 230 kV
-
-    # Create network manually
-    network_data = {
-        "version": "1.0",
-        "type": "input",
-        "is_batch": False,
-        "attributes": {},
-        "data": {
-            "node": [
-                {"id": 1, "u_rated": base_voltage},
-                {"id": 2, "u_rated": base_voltage},
-            ],
-            "line": [
-                {
-                    "id": 3,
-                    "from_node": 1,
-                    "to_node": 2,
-                    "from_status": 1,
-                    "to_status": 1,
-                    "r1": 0.01 * ((base_voltage**2) / base_power),  # 0.01 pu in ohms
-                    "x1": 0.1 * ((base_voltage**2) / base_power),  # 0.1 pu in ohms
-                    "c1": 0.0,
-                    "tan1": 0.0,
-                    "i_n": 1000.0,
-                }
-            ],
-            "source": [
-                {
-                    "id": 4,
-                    "node": 1,
-                    "status": 1,
-                    "u_ref": 1.05,
-                    "u_ref_angle": 0.0,
-                    "sk": 1e10,  # Very high short circuit power (stiff source)
-                    "rx_ratio": 0.0,
-                    "z01_ratio": 1.0,
-                }
-            ],
-            "sym_load": [
-                {
-                    "id": 5,
-                    "node": 2,
-                    "status": 1,
-                    "type": 0,  # const_power
-                    "p_specified": 100e6,  # 100 MW
-                    "q_specified": 50e6,  # 50 MVAR
-                }
-            ],
-        },
-    }
-
-    # Save input file
-    input_file = test_dir / "input.json"
-    with open(input_file, "w") as f:
-        json.dump(network_data, f, indent=2)
-
-    print(f"✅ Input saved: {input_file}")
-    print(f"   Network: 2 buses, 1 line")
-    print(f"   Bus 1: Source, 1.05 pu")
-    print(f"   Bus 2: Load, 100 MW + j50 MVAR")
-    print(f"   Line: 0.01 + j0.1 pu")
-    print()
-
-    # Generate reference solution using PGM
-    if PGM_AVAILABLE:
-        print("🧮 Generating PGM reference solution...")
-        try:
-            solver = PGMReferenceSolver(calculation_method="newton_raphson")
-            output_file = test_dir / "output.json"
-
-            result = solver.generate_reference_solution(
-                input_file=input_file,
-                output_file=output_file,
-                tolerance=1e-8,
-                max_iterations=20,
-            )
-
-            print(f"✅ Reference saved: {output_file}")
-            print(f"   Converged: {result['converged']}")
-            print(f"   Time: {result['calculation_time']:.3f}s")
-            print(f"   Nodes: {result['n_nodes']}")
-            print()
-
-            # Print voltage results from output file
-            with open(output_file, "r") as f:
-                output_data = json.load(f)
-
-            print("📊 Reference Solution (PGM):")
-            if "node" in output_data:
-                for node in output_data["node"]:
-                    u_pu = node["u_pu"]
-                    u_angle = node["u_angle"]
-                    print(f"   Node {node['id']}: {u_pu:.4f}∠{u_angle:.2f}° pu")
-
-            return True
-
-        except Exception as e:
-            print(f"❌ Failed to generate reference: {e}")
-            import traceback
-
-            traceback.print_exc()
-            return False
-    else:
-        print("⚠️  PGM not available - skipping reference generation")
-        return False
-
-
-def generate_radial_network_test():
-    """Generate a small radial network test case."""
-    print("\n📝 Generating Radial Network Test Case")
-    print("=" * 50)
+    print(f"\n📝 Generating {test_name}")
+    print("=" * 70)
 
     if not PGM_AVAILABLE:
         print("⚠️  PGM not available - skipping")
         return False
 
     # Create test data directory
-    test_dir = Path(__file__).parent / "test_data" / "radial_3feeder"
+    test_dir = Path(__file__).parent / "test_data" / test_name
     test_dir.mkdir(parents=True, exist_ok=True)
 
     # Use grid generator
-    print("🔧 Generating radial network with PGM grid generator...")
-    generator = PGMGridGenerator(seed=42)
+    print(
+        f"🔧 Generating radial network: {n_feeder} feeder(s) × {n_node_per_feeder} nodes/feeder"
+    )
+    generator = PGMGridGenerator(seed=seed)
 
     network_data = generator.generate_symmetric_radial_grid(
-        n_feeder=3,
-        n_node_per_feeder=4,
-        load_p_w_min=0.2e6,
-        load_p_w_max=0.6e6,
+        n_feeder=n_feeder,
+        n_node_per_feeder=n_node_per_feeder,
+        load_p_w_min=0.15e6,  # 150 kW min
+        load_p_w_max=0.20e6,  # 200 kW max
         pf=0.95,
         n_step=1,
     )
+
+    # Extract metadata before export
+    n_nodes = network_data["metadata"]["n_node"]
+    n_lines = network_data["metadata"]["n_line"]
+    n_loads = len(network_data["loads"])
+    total_load_mw = network_data["loads"]["p_specified"].abs().sum() / 1e6
 
     # Save to PGM format
     input_file = test_dir / "input.json"
     generator.export_to_pgm_format(network_data, test_dir)
 
     print(f"✅ Input saved: {input_file}")
-    print(
-        f"   Network: {network_data['metadata']['n_node']} nodes, "
-        f"{network_data['metadata']['n_line']} lines"
-    )
+    print(f"   Network: {n_nodes} nodes, {n_lines} lines")
+    print(f"   Total load: {total_load_mw:.2f} MW")
+
+    # Create metadata file
+    metadata = {
+        "name": f"Radial {n_feeder}-Feeder Network ({n_node_per_feeder} nodes/feeder)",
+        "description": f"{n_nodes}-bus radial distribution feeder with {n_feeder} main branch(es)",
+        "network_type": "distribution",
+        "topology": "radial",
+        "n_node": n_nodes,
+        "n_line": n_lines,
+        "n_load": n_loads,
+        "n_feeder": n_feeder,
+        "n_node_per_feeder": n_node_per_feeder,
+        "voltage_level_kv": 10.0,
+        "base_voltage": 10000.0,
+        "frequency": 50.0,
+        "total_load_mw": round(total_load_mw, 2),
+        "base_power_va": 10000000.0,
+        "seed": seed,
+        "notes": [
+            "Automatically generated test case",
+            "Loads are 150-200 kW per bus",
+            "Power factor: 0.95 lagging",
+        ],
+        "validation_criteria": {
+            "voltage_magnitude_tolerance_pu": 0.0001,
+            "convergence_required": True,
+        },
+    }
+
+    metadata_file = test_dir / "metadata.json"
+    with open(metadata_file, "w") as f:
+        json.dump(metadata, f, indent=2)
+
+    print(f"✅ Metadata saved: {metadata_file}")
     print()
 
     # Generate reference solution
@@ -193,6 +114,20 @@ def generate_radial_network_test():
             tolerance=1e-8,
             max_iterations=20,
         )
+
+        # Update metadata with PGM solver info
+        metadata["pgm_reference"] = {
+            "converged": result["converged"],
+            "calculation_time_s": result["calculation_time"],
+            "iterations": result.get("n_iterations", None),
+            "method": "newton_raphson",
+            "tolerance": 1e-8,
+            "max_iterations": 20,
+        }
+
+        # Re-save metadata with PGM results
+        with open(metadata_file, "w") as f:
+            json.dump(metadata, f, indent=2)
 
         print(f"✅ Reference saved: {output_file}")
         print(f"   Converged: {result['converged']}")
@@ -211,33 +146,68 @@ def generate_radial_network_test():
 
 if __name__ == "__main__":
     print("GAP Test Data Generator")
-    print("🎯 Purpose: Generate test networks with PGM reference solutions")
-    print("=" * 60)
+    print("🎯 Purpose: Generate radial distribution network test cases")
+    print("=" * 70)
     print()
 
+    if not PGM_AVAILABLE:
+        print("❌ Power Grid Model (PGM) is not available!")
+        print("   Please install: pip install power-grid-model")
+        sys.exit(1)
+
+    # Define test case configurations
+    # Format: (n_feeder, n_node_per_feeder)
+    test_configs = [
+        (1, 2),  # radial_1feeder_2nodepf
+        (1, 4),  # radial_1feeder_4nodepf
+        (1, 8),  # radial_1feeder_8nodepf
+        (2, 2),  # radial_2feeder_2nodepf
+        (2, 4),  # radial_2feeder_4nodepf
+        (2, 8),  # radial_2feeder_8nodepf
+        (3, 2),  # radial_3feeder_2nodepf
+        (3, 4),  # radial_3feeder_4nodepf
+        (3, 8),  # radial_3feeder_8nodepf
+        (10, 10),  # radial_10feeder_10nodepf (extreme case: 101 buses)
+    ]
+
+    print(f"📋 Generating {len(test_configs)} test cases:")
+    for n_feeder, n_nodepf in test_configs:
+        test_name = f"radial_{n_feeder}feeder_{n_nodepf}nodepf"
+        n_total = 1 + n_feeder * n_nodepf  # slack + feeder nodes
+        print(f"   • {test_name:<30} ({n_total:2d} buses)")
+    print()
+
+    # Generate all test cases
     success_count = 0
-    total_count = 2
+    failed_cases = []
 
-    # Generate test cases
-    if generate_simple_2bus_test():
-        success_count += 1
-
-    if generate_radial_network_test():
-        success_count += 1
+    for n_feeder, n_nodepf in test_configs:
+        test_name = f"radial_{n_feeder}feeder_{n_nodepf}nodepf"
+        try:
+            if generate_radial_network_test(n_feeder, n_nodepf, seed=42):
+                success_count += 1
+            else:
+                failed_cases.append(test_name)
+        except Exception as e:
+            print(f"❌ Error generating {test_name}: {e}")
+            failed_cases.append(test_name)
 
     # Summary
-    print("=" * 60)
-    print(f"✅ Generated {success_count}/{total_count} test cases")
+    print("=" * 70)
+    print(f"✅ Successfully generated {success_count}/{len(test_configs)} test cases")
+
+    if failed_cases:
+        print(f"\n❌ Failed cases:")
+        for case in failed_cases:
+            print(f"   • {case}")
+
     print()
     print("📁 Test data location: tests/pgm_validation/test_data/")
-    print("   - simple_2bus/input.json & output.json")
-    print("   - radial_3feeder/input.json & output.json")
     print()
     print("🔧 Next steps:")
-    print("   1. Use these JSON files to test C++ solver directly")
-    print(
-        "   2. Debug with: ./build/gap_solver -i tests/pgm_validation/test_data/simple_2bus/input.json -o result.json"
-    )
-    print(
-        "   3. Compare output with tests/pgm_validation/test_data/simple_2bus/output.json"
-    )
+    print("   1. Run validation: python run_validation.py")
+    print("   2. Run specific test: python validate.py radial_3feeder_4nodepf")
+    print("   3. Check all tests: python run_validation.py --verbose")
+    print()
+
+    sys.exit(0 if success_count == len(test_configs) else 1)

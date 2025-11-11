@@ -1,0 +1,34 @@
+{
+  "name": "Radial 1-Feeder Network (8 nodes/feeder)",
+  "description": "9-bus radial distribution feeder with 1 main branch(es)",
+  "network_type": "distribution",
+  "topology": "radial",
+  "n_node": 9,
+  "n_line": 8,
+  "n_load": 8,
+  "n_feeder": 1,
+  "n_node_per_feeder": 8,
+  "voltage_level_kv": 10.0,
+  "base_voltage": 10000.0,
+  "frequency": 50.0,
+  "total_load_mw": 0.47,
+  "base_power_va": 10000000.0,
+  "seed": 42,
+  "notes": [
+    "Automatically generated test case",
+    "Loads are 150-200 kW per bus",
+    "Power factor: 0.95 lagging"
+  ],
+  "validation_criteria": {
+    "voltage_magnitude_tolerance_pu": 0.0001,
+    "convergence_required": true
+  },
+  "pgm_reference": {
+    "converged": true,
+    "calculation_time_s": 0.00022149085998535156,
+    "iterations": null,
+    "method": "newton_raphson",
+    "tolerance": 1e-08,
+    "max_iterations": 20
+  }
+}

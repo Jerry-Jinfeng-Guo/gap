@@ -56,11 +56,27 @@
       {
         "id": 12,
         "u_rated": 10000.0
+      },
+      {
+        "id": 13,
+        "u_rated": 10000.0
+      },
+      {
+        "id": 14,
+        "u_rated": 10000.0
+      },
+      {
+        "id": 15,
+        "u_rated": 10000.0
+      },
+      {
+        "id": 16,
+        "u_rated": 10000.0
       }
     ],
     "line": [
       {
-        "id": 13,
+        "id": 17,
         "from_node": 0,
         "to_node": 1,
         "from_status": 1,
@@ -77,7 +93,7 @@
         "i_n": 1000.0
       },
       {
-        "id": 14,
+        "id": 18,
         "from_node": 1,
         "to_node": 2,
         "from_status": 1,
@@ -94,7 +110,7 @@
         "i_n": 1000.0
       },
       {
-        "id": 15,
+        "id": 19,
         "from_node": 2,
         "to_node": 3,
         "from_status": 1,
@@ -111,7 +127,7 @@
         "i_n": 1000.0
       },
       {
-        "id": 16,
+        "id": 20,
         "from_node": 3,
         "to_node": 4,
         "from_status": 1,
@@ -128,8 +144,8 @@
         "i_n": 1000.0
       },
       {
-        "id": 17,
-        "from_node": 0,
+        "id": 21,
+        "from_node": 4,
         "to_node": 5,
         "from_status": 1,
         "to_status": 1,
@@ -145,7 +161,7 @@
         "i_n": 1000.0
       },
       {
-        "id": 18,
+        "id": 22,
         "from_node": 5,
         "to_node": 6,
         "from_status": 1,
@@ -162,7 +178,7 @@
         "i_n": 1000.0
       },
       {
-        "id": 19,
+        "id": 23,
         "from_node": 6,
         "to_node": 7,
         "from_status": 1,
@@ -179,7 +195,7 @@
         "i_n": 1000.0
       },
       {
-        "id": 20,
+        "id": 24,
         "from_node": 7,
         "to_node": 8,
         "from_status": 1,
@@ -196,7 +212,7 @@
         "i_n": 1000.0
       },
       {
-        "id": 21,
+        "id": 25,
         "from_node": 0,
         "to_node": 9,
         "from_status": 1,
@@ -213,7 +229,7 @@
         "i_n": 1000.0
       },
       {
-        "id": 22,
+        "id": 26,
         "from_node": 9,
         "to_node": 10,
         "from_status": 1,
@@ -230,7 +246,7 @@
         "i_n": 1000.0
       },
       {
-        "id": 23,
+        "id": 27,
         "from_node": 10,
         "to_node": 11,
         "from_status": 1,
@@ -247,7 +263,7 @@
         "i_n": 1000.0
       },
       {
-        "id": 24,
+        "id": 28,
         "from_node": 11,
         "to_node": 12,
         "from_status": 1,
@@ -262,6 +278,74 @@
         "tan1": 0.0,
         "tan0": 0.0,
         "i_n": 1000.0
+      },
+      {
+        "id": 29,
+        "from_node": 12,
+        "to_node": 13,
+        "from_status": 1,
+        "to_status": 1,
+        "length_km": 1.0575460480322658,
+        "r1": 0.06662540102603275,
+        "x1": 0.10892724294732338,
+        "c1": 4.230184192129063e-07,
+        "r0": 0.16497718349303347,
+        "x0": 0.10575460480322658,
+        "c0": 6.979803917012955e-07,
+        "tan1": 0.0,
+        "tan0": 0.0,
+        "i_n": 1000.0
+      },
+      {
+        "id": 30,
+        "from_node": 13,
+        "to_node": 14,
+        "from_status": 1,
+        "to_status": 1,
+        "length_km": 1.129104645308332,
+        "r1": 0.07113359265442491,
+        "x1": 0.11629777846675819,
+        "c1": 4.5164185812333276e-07,
+        "r0": 0.17614032466809978,
+        "x0": 0.1129104645308332,
+        "c0": 7.452090659034992e-07,
+        "tan1": 0.0,
+        "tan0": 0.0,
+        "i_n": 1000.0
+      },
+      {
+        "id": 31,
+        "from_node": 14,
+        "to_node": 15,
+        "from_status": 1,
+        "to_status": 1,
+        "length_km": 0.9773656795309325,
+        "r1": 0.06157403781044875,
+        "x1": 0.10066866499168604,
+        "c1": 3.9094627181237296e-07,
+        "r0": 0.15246904600682545,
+        "x0": 0.09773656795309325,
+        "c0": 6.450613484904154e-07,
+        "tan1": 0.0,
+        "tan0": 0.0,
+        "i_n": 1000.0
+      },
+      {
+        "id": 32,
+        "from_node": 15,
+        "to_node": 16,
+        "from_status": 1,
+        "to_status": 1,
+        "length_km": 0.8908954887139108,
+        "r1": 0.056126415788976376,
+        "x1": 0.0917622353375328,
+        "c1": 3.563581954855643e-07,
+        "r0": 0.1389796962393701,
+        "x0": 0.08908954887139109,
+        "c0": 5.879910225511811e-07,
+        "tan1": 0.0,
+        "tan0": 0.0,
+        "i_n": 1000.0
       }
     ],
     "sym_load": [
@@ -270,96 +354,128 @@
         "node": 1,
         "status": 1,
         "type": "const_power",
-        "p_specified": 152515.34934408858,
-        "q_specified": 50129.37112520346
+        "p_specified": 59243.07978359725,
+        "q_specified": 19472.258666711656
       },
       {
         "id": 100001,
         "node": 2,
         "status": 1,
         "type": "const_power",
-        "p_specified": 176368.21510277732,
-        "q_specified": 57969.42896304962
+        "p_specified": 51063.620935069586,
+        "q_specified": 16783.800554236008
       },
       {
         "id": 100002,
         "node": 3,
         "status": 1,
         "type": "const_power",
-        "p_specified": 125788.55984364415,
-        "q_specified": 41344.70023394605
+        "p_specified": 63793.852866543035,
+        "q_specified": 20968.02544535175
       },
       {
         "id": 100003,
         "node": 4,
         "status": 1,
         "type": "const_power",
-        "p_specified": 96965.16290463692,
-        "q_specified": 31870.90780283328
+        "p_specified": 60527.73998536775,
+        "q_specified": 19894.506055589492
       },
       {
         "id": 100004,
         "node": 5,
         "status": 1,
         "type": "const_power",
-        "p_specified": 140611.30493544464,
-        "q_specified": 46216.70094073888
+        "p_specified": 62634.795668089566,
+        "q_specified": 20587.061767226955
       },
       {
         "id": 100005,
         "node": 6,
         "status": 1,
         "type": "const_power",
-        "p_specified": 75175.63414722338,
-        "q_specified": 24709.036040933704
+        "p_specified": 55908.766135497804,
+        "q_specified": 18376.322768900423
       },
       {
         "id": 100006,
         "node": 7,
         "status": 1,
         "type": "const_power",
-        "p_specified": 177017.48959901094,
-        "q_specified": 58182.835169859616
+        "p_specified": 66178.30040658172,
+        "q_specified": 21751.755451395307
       },
       {
         "id": 100007,
         "node": 8,
         "status": 1,
         "type": "const_power",
-        "p_specified": 150888.58654960862,
-        "q_specified": 49594.68005176155
+        "p_specified": 64885.35202203663,
+        "q_specified": 21326.78386857865
       },
       {
         "id": 100008,
         "node": 9,
         "status": 1,
         "type": "const_power",
-        "p_specified": 167745.03201138315,
-        "q_specified": 55135.12574486122
+        "p_specified": 62973.0582845627,
+        "q_specified": 20698.243312637886
       },
       {
         "id": 100009,
         "node": 10,
         "status": 1,
         "type": "const_power",
-        "p_specified": 113936.79575064912,
-        "q_specified": 37449.213758249
+        "p_specified": 53243.97846419946,
+        "q_specified": 17500.44941766806
       },
       {
         "id": 100010,
         "node": 11,
         "status": 1,
         "type": "const_power",
-        "p_specified": 196093.0699193204,
-        "q_specified": 64452.675218208075
+        "p_specified": 57778.68339545057,
+        "q_specified": 18990.93485024651
       },
       {
         "id": 100011,
         "node": 12,
         "status": 1,
         "type": "const_power",
-        "p_specified": 185749.4828429597,
-        "q_specified": 61052.902555674795
+        "p_specified": 50730.06276312048,
+        "q_specified": 16674.16528496382
+      },
+      {
+        "id": 100012,
+        "node": 13,
+        "status": 1,
+        "type": "const_power",
+        "p_specified": 52571.49153445913,
+        "q_specified": 17279.413652921878
+      },
+      {
+        "id": 100013,
+        "node": 14,
+        "status": 1,
+        "type": "const_power",
+        "p_specified": 61384.14922070758,
+        "q_specified": 20175.99415877408
+      },
+      {
+        "id": 100014,
+        "node": 15,
+        "status": 1,
+        "type": "const_power",
+        "p_specified": 62412.70259846362,
+        "q_specified": 20514.06330537052
+      },
+      {
+        "id": 100015,
+        "node": 16,
+        "status": 1,
+        "type": "const_power",
+        "p_specified": 66125.16220723683,
+        "q_specified": 21734.289769892817
       }
     ],
     "source": [

@@ -1,0 +1,34 @@
+{
+  "name": "Radial 2-Feeder Network (2 nodes/feeder)",
+  "description": "5-bus radial distribution feeder with 2 main branch(es)",
+  "network_type": "distribution",
+  "topology": "radial",
+  "n_node": 5,
+  "n_line": 4,
+  "n_load": 4,
+  "n_feeder": 2,
+  "n_node_per_feeder": 2,
+  "voltage_level_kv": 10.0,
+  "base_voltage": 10000.0,
+  "frequency": 50.0,
+  "total_load_mw": 0.24,
+  "base_power_va": 10000000.0,
+  "seed": 42,
+  "notes": [
+    "Automatically generated test case",
+    "Loads are 150-200 kW per bus",
+    "Power factor: 0.95 lagging"
+  ],
+  "validation_criteria": {
+    "voltage_magnitude_tolerance_pu": 0.0001,
+    "convergence_required": true
+  },
+  "pgm_reference": {
+    "converged": true,
+    "calculation_time_s": 0.0001983642578125,
+    "iterations": null,
+    "method": "newton_raphson",
+    "tolerance": 1e-08,
+    "max_iterations": 20
+  }
+}

@@ -55,6 +55,10 @@ class ValidationResult:
     max_angle_error_deg: float
     mean_voltage_error_pu: float
     mean_angle_error_deg: float
+    pgm_calculation_time: Optional[float] = None
+    n_nodes: Optional[int] = None
+    n_lines: Optional[int] = None
+    per_node_errors: Optional[List[Dict]] = None
     error_message: Optional[str] = None
 
 
@@ -196,8 +200,9 @@ class ValidationRunner:
 
         voltage_errors = []
         angle_errors = []
+        per_node_errors = []
 
-        for bus_id in gap_buses:
+        for bus_id in sorted(gap_buses.keys()):
             if bus_id not in pgm_buses:
                 continue
 
@@ -213,12 +218,31 @@ class ValidationRunner:
             angle_error = abs(gap_bus["u_angle_deg"] - pgm_angle_deg)
             angle_errors.append(angle_error)
 
+            # Store per-node details
+            per_node_errors.append(
+                {
+                    "bus_id": bus_id,
+                    "gap_v_pu": gap_bus["u_pu"],
+                    "pgm_v_pu": pgm_bus["u_pu"],
+                    "v_error_pu": v_error,
+                    "gap_angle_deg": gap_bus["u_angle_deg"],
+                    "pgm_angle_deg": pgm_angle_deg,
+                    "angle_error_deg": angle_error,
+                }
+            )
+
         max_v_error = max(voltage_errors) if voltage_errors else 0.0
         mean_v_error = np.mean(voltage_errors) if voltage_errors else 0.0
         max_angle_error = max(angle_errors) if angle_errors else 0.0
         mean_angle_error = np.mean(angle_errors) if angle_errors else 0.0
 
-        return max_v_error, mean_v_error, max_angle_error, mean_angle_error
+        return (
+            max_v_error,
+            mean_v_error,
+            max_angle_error,
+            mean_angle_error,
+            per_node_errors,
+        )
 
     def run_test_case(self, test_case_dir: Path) -> ValidationResult:
         """Run validation for a single test case."""
@@ -277,9 +301,18 @@ class ValidationRunner:
                 )
 
             # Compare results
-            max_v_err, mean_v_err, max_a_err, mean_a_err = self.compare_results(
-                gap_results, pgm_reference
-            )
+            (
+                max_v_err,
+                mean_v_err,
+                max_a_err,
+                mean_a_err,
+                per_node,
+            ) = self.compare_results(gap_results, pgm_reference)
+
+            # Extract metadata
+            pgm_calc_time = metadata.get("pgm_reference", {}).get("calculation_time_s")
+            n_nodes = metadata.get("n_node")
+            n_lines = metadata.get("n_line")
 
             # Determine success criteria (voltage magnitude is primary metric)
             success = max_v_err < 1e-4  # 0.01% error threshold
@@ -295,6 +328,10 @@ class ValidationRunner:
                 max_angle_error_deg=max_a_err,
                 mean_voltage_error_pu=mean_v_err,
                 mean_angle_error_deg=mean_a_err,
+                pgm_calculation_time=pgm_calc_time,
+                n_nodes=n_nodes,
+                n_lines=n_lines,
+                per_node_errors=per_node,
             )
 
         except Exception as e:
@@ -338,37 +375,61 @@ class ValidationRunner:
 
         return self.results
 
-    def print_summary(self):
+    def print_summary(self, detailed: bool = False):
         """Print validation summary."""
         if not self.results:
             print("\n⚠️  No validation results to display")
             return
 
         print(f"\n{'='*80}")
-        print(f"VALIDATION SUMMARY")
+        print("VALIDATION SUMMARY")
         print(f"{'='*80}\n")
 
-        # Summary table
-        print(
-            f"{'Test Case':<25} {'Status':<10} {'Iter':<6} {'Max V Err':<12} {'Max ∠ Err':<12} {'Time (ms)':<10}"
-        )
-        print("-" * 80)
+        # Summary table header
+        if detailed:
+            print(
+                f"{'Test Case':<25} {'Status':<10} {'Nodes':<6} {'Iter':<6} "
+                f"{'Max V Err':<12} {'Max ∠ Err':<12} {'GAP (ms)':<10} {'PGM (ms)':<10}"
+            )
+            print("-" * 110)
+        else:
+            print(
+                f"{'Test Case':<25} {'Status':<10} {'Iter':<6} "
+                f"{'Max V Err':<12} {'Max ∠ Err':<12} {'Time (ms)':<10}"
+            )
+            print("-" * 80)
 
         for result in self.results:
             status = "✅ PASS" if result.success else "❌ FAIL"
             if not result.converged:
                 status = "❌ NO CONV"
 
-            print(
-                f"{result.test_case:<25} {status:<10} {result.iterations:<6} "
-                f"{result.max_voltage_error_pu:<12.2e} {result.max_angle_error_deg:<12.4f} "
-                f"{result.calculation_time*1000:<10.2f}"
-            )
+            if detailed:
+                pgm_time_str = (
+                    f"{result.pgm_calculation_time*1000:.2f}"
+                    if result.pgm_calculation_time
+                    else "N/A"
+                )
+                nodes_str = f"{result.n_nodes}" if result.n_nodes else "N/A"
+                print(
+                    f"{result.test_case:<25} {status:<10} {nodes_str:<6} {result.iterations:<6} "
+                    f"{result.max_voltage_error_pu:<12.2e} {result.max_angle_error_deg:<12.4f} "
+                    f"{result.calculation_time*1000:<10.2f} {pgm_time_str:<10}"
+                )
+            else:
+                print(
+                    f"{result.test_case:<25} {status:<10} {result.iterations:<6} "
+                    f"{result.max_voltage_error_pu:<12.2e} {result.max_angle_error_deg:<12.4f} "
+                    f"{result.calculation_time*1000:<10.2f}"
+                )
 
             if result.error_message:
                 print(f"  └─ Error: {result.error_message}")
 
-        print("-" * 80)
+        if detailed:
+            print("-" * 110)
+        else:
+            print("-" * 80)
 
         # Overall statistics
         passed = sum(1 for r in self.results if r.success)
@@ -383,12 +444,70 @@ class ValidationRunner:
         if passed > 0:
             passed_results = [r for r in self.results if r.success]
             avg_iterations = np.mean([r.iterations for r in passed_results])
-            avg_time = np.mean([r.calculation_time for r in passed_results])
+            avg_gap_time = np.mean([r.calculation_time for r in passed_results])
             max_v_err = max([r.max_voltage_error_pu for r in passed_results])
 
-            print(f"\n   Average iterations: {avg_iterations:.1f}")
-            print(f"   Average time: {avg_time*1000:.2f} ms")
+            print(f"\n   Average GAP iterations: {avg_iterations:.1f}")
+            print(f"   Average GAP time: {avg_gap_time*1000:.2f} ms")
             print(f"   Maximum voltage error: {max_v_err:.2e} pu")
+
+            # PGM timing stats if available
+            pgm_times = [
+                r.pgm_calculation_time for r in passed_results if r.pgm_calculation_time
+            ]
+            if pgm_times:
+                avg_pgm_time = np.mean(pgm_times)
+                print(f"   Average PGM time: {avg_pgm_time*1000:.2f} ms")
+                speedup = avg_pgm_time / avg_gap_time
+                if speedup > 1:
+                    print(f"   GAP speedup: {speedup:.2f}x faster than PGM")
+                else:
+                    print(f"   PGM speedup: {1/speedup:.2f}x faster than GAP")
+
+    def print_detailed_results(self, test_case_name: Optional[str] = None):
+        """Print detailed per-node comparison for a specific test case or all."""
+        results_to_print = self.results
+        if test_case_name:
+            results_to_print = [
+                r for r in self.results if r.test_case == test_case_name
+            ]
+            if not results_to_print:
+                print(f"❌ No results found for test case: {test_case_name}")
+                return
+
+        for result in results_to_print:
+            if not result.per_node_errors:
+                continue
+
+            print(f"\n{'='*100}")
+            print(f"Detailed Results: {result.test_case}")
+            print(f"{'='*100}")
+            print(f"Network: {result.n_nodes} nodes, {result.n_lines} lines")
+            print(
+                f"Convergence: {'✅ Yes' if result.converged else '❌ No'} ({result.iterations} iterations)"
+            )
+            print(f"GAP Time: {result.calculation_time*1000:.3f} ms")
+            if result.pgm_calculation_time:
+                print(f"PGM Time: {result.pgm_calculation_time*1000:.3f} ms")
+            print()
+            print(
+                f"{'Bus':<6} {'GAP V (pu)':<12} {'PGM V (pu)':<12} {'V Err (pu)':<12} "
+                f"{'GAP ∠ (°)':<12} {'PGM ∠ (°)':<12} {'∠ Err (°)':<12}"
+            )
+            print("-" * 100)
+
+            for node in result.per_node_errors:
+                print(
+                    f"{node['bus_id']:<6} "
+                    f"{node['gap_v_pu']:<12.8f} {node['pgm_v_pu']:<12.8f} {node['v_error_pu']:<12.2e} "
+                    f"{node['gap_angle_deg']:<12.6f} {node['pgm_angle_deg']:<12.6f} {node['angle_error_deg']:<12.6f}"
+                )
+
+            print("-" * 100)
+            print(f"Max Voltage Error: {result.max_voltage_error_pu:.2e} pu")
+            print(f"Mean Voltage Error: {result.mean_voltage_error_pu:.2e} pu")
+            print(f"Max Angle Error: {result.max_angle_error_deg:.6f}°")
+            print(f"Mean Angle Error: {result.mean_angle_error_deg:.6f}°")
 
 
 def main():
@@ -402,6 +521,16 @@ def main():
         help="Base power in VA (default: auto-detect from metadata or load size)",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument(
+        "--detailed",
+        action="store_true",
+        help="Show detailed comparison including PGM timing",
+    )
+    parser.add_argument(
+        "--per-node",
+        action="store_true",
+        help="Show per-node voltage and angle comparisons",
+    )
     parser.add_argument(
         "--test-data-dir",
         type=Path,
@@ -418,7 +547,10 @@ def main():
     )
 
     runner.run_all(specific_test=args.test_case)
-    runner.print_summary()
+    runner.print_summary(detailed=args.detailed)
+
+    if args.per_node:
+        runner.print_detailed_results(test_case_name=args.test_case)
 
     # Exit with error code if any tests failed
     if any(not r.success for r in runner.results):

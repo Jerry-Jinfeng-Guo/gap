@@ -103,11 +103,12 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
                 series_admittance = Complex(0.0, 0.0);  // Open circuit
             }
 
-            // Add parallel conductance and susceptance
-            Complex branch_admittance = series_admittance + Complex(branch.g1, branch.b1);
+            // Add parallel conductance (g1 only, not b1 which is handled separately as line
+            // charging)
+            Complex branch_admittance = series_admittance + Complex(branch.g1, 0.0);
 
             // Add to diagonal elements (self-admittance)
-            // Include half of line charging susceptance at each end
+            // Include half of line charging susceptance (b1) at each end (π-model)
             diagonal_elements[from_bus] += branch_admittance + Complex(0.0, branch.b1 / 2.0);
             diagonal_elements[to_bus] += branch_admittance + Complex(0.0, branch.b1 / 2.0);
 

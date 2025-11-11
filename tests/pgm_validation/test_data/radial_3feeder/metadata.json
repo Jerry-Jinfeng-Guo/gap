@@ -1,11 +1,26 @@
 {
+  "name": "Radial 3-Feeder Distribution Network",
+  "description": "13-bus radial distribution feeder with 3 main branches. Typical European 10kV distribution network with residential/commercial loads.",
+  "network_type": "distribution",
+  "topology": "radial",
   "n_node": 13,
   "n_line": 12,
   "n_load": 12,
   "n_feeder": 3,
   "n_node_per_feeder": 4,
-  "seed": 42,
-  "topology": "radial",
+  "voltage_level_kv": 10.0,
+  "base_voltage": 10000.0,
   "frequency": 50.0,
-  "base_voltage": 10000.0
+  "total_load_mw": 2.0,
+  "base_power_va": 10000000.0,
+  "seed": 42,
+  "notes": [
+    "Loads are small (150-200 kW per bus) relative to network impedances",
+    "With proper per-unit normalization (10 MVA base), voltage magnitudes match PGM within 0.01%",
+    "Voltage magnitude accuracy is the primary validation metric"
+  ],
+  "validation_criteria": {
+    "voltage_magnitude_tolerance_pu": 0.0001,
+    "convergence_required": true
+  }
 }

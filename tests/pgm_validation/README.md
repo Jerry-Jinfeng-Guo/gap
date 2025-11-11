@@ -1,53 +1,92 @@
-# GAP NRPF Validation - Power Grid Model Integration
+# GAP Solver Validation Framework
 
-## 🎉 Production-Ready Validation Framework
+## Overview
 
-This directory contains a comprehensive validation framework that integrates GAP's Newton-Raphson Power Flow solver with the **Power Grid Model benchmark repository** for systematic cross-library validation.
+This directory contains a comprehensive validation framework for testing the GAP Newton-Raphson Power Flow solver against reference solutions from the Power Grid Model (PGM) library.
 
-### ✅ Current Status
+### Quick Start
 
-The validation framework is **complete and working**! All components have been implemented and tested:
+```bash
+# Run all validation tests
+cd tests/pgm_validation
+python run_validation.py
 
-- ✅ **Grid Generation**: PGM benchmark algorithm integration for symmetric radial networks
-- ✅ **JSON I/O**: Bi-directional conversion between GAP and PGM data formats
-- ✅ **Reference Solutions**: PGM Newton-Raphson solver integration for benchmarking
-- ✅ **Validation Pipeline**: End-to-end automated comparison and reporting
-- ✅ **Framework Demo**: Working demonstration with synthetic GAP results
+# Run a specific test case
+python run_validation.py --test-case radial_3feeder
 
-### 📁 Directory Structure
+# Verbose output with custom base power
+python run_validation.py --verbose --base-power 10e6
+```
+
+### Directory Structure
 
 ```
 tests/pgm_validation/
-├── grid_generators/           # Test network generation
-│   └── pgm_generator.py      # PGM-compatible grid generation
-├── json_io/                  # Data format conversion
-│   ├── gap_json_parser.py    # PGM JSON → GAP data structures
-│   └── gap_json_serializer.py # GAP results → PGM JSON format
-├── reference_solutions/      # PGM benchmark integration
-│   └── pgm_reference.py     # PGM Newton-Raphson solver wrapper
-├── validation_demo.py        # ✅ Main validation pipeline
-├── example_validation.py     # ✅ Simple usage example
-└── README.md                # This file
+├── run_validation.py         # 🎯 Main validation runner
+├── test_data/                # Test cases with input/output pairs
+│   ├── simple_2bus/         # 2-bus test case
+│   │   ├── input.json       # PGM format input
+│   │   ├── output.json      # PGM reference solution
+│   │   └── metadata.json    # Test case metadata
+│   └── radial_3feeder/      # 13-bus distribution feeder
+│       ├── input.json
+│       ├── output.json
+│       └── metadata.json
+├── grid_generators/          # Test network generation
+│   └── pgm_generator.py     # PGM-compatible grid generation
+├── json_io/                 # Data format conversion
+│   ├── gap_json_parser.py   # PGM JSON → GAP structures
+│   └── gap_json_serializer.py # GAP → PGM JSON
+├── reference_solutions/     # Reference solver integration
+│   └── pgm_reference.py    # PGM Newton-Raphson wrapper
+└── README.md               # This file
 ```
 
-### 🗂️ Repository Organization
+### Test Case Format
 
-The GAP project follows a clean testing structure:
+Each test case directory must contain:
+- `input.json`: Power Grid Model format input data
+- `output.json`: Reference solution from PGM solver
+- `metadata.json` (optional): Test case description and validation criteria
 
+Example metadata.json:
+```json
+{
+  "name": "Simple 2-Bus Test",
+  "network_type": "test",
+  "base_power_va": 100000000.0,
+  "validation_criteria": {
+    "voltage_magnitude_tolerance_pu": 0.0001,
+    "convergence_required": true
+  }
+}
 ```
-gap/
-├── src/                     # GAP source code
-├── include/                 # Header files
-├── tests/                   # All testing code
-│   ├── unit/               # C++ unit tests
-│   ├── validation/         # C++ validation tests (IEEE cases)
-│   └── pgm_validation/     # 🎯 Python PGM benchmark validation
-└── docs/                   # Documentation
+
+### Validation Metrics
+
+The validation framework compares:
+- **Voltage Magnitudes** (primary metric): Must match within 0.01%
+- **Voltage Angles**: Reported but may differ due to per-unit system differences
+- **Convergence**: Solver must converge successfully
+- **Performance**: Iteration count and computation time
+
+### Adding New Test Cases
+
+1. Generate or obtain PGM-format input:
+```bash
+python generate_test_data.py --output test_data/my_case
 ```
 
-**Benefits:**
-- **Clear Separation**: C++ tests vs Python validation tools
-- **Standard Structure**: All test code under `tests/`
+2. Create the test case directory:
+```bash
+mkdir test_data/my_test_case
+# Place input.json and output.json in the directory
+```
+
+3. Run validation:
+```bash
+python run_validation.py --test-case my_test_case
+```
 - **Scalable**: Easy to add more validation frameworks
 
 ### 🚀 Quick Start

@@ -57,7 +57,8 @@ void init_solver_bindings(pybind11::module& m) {
         "solve_simple_power_flow",
         [](const std::vector<std::vector<double>>& bus_data,
            const std::vector<std::vector<double>>& branch_data, double tolerance = 1e-6,
-           int max_iterations = 50, bool verbose = false) -> std::vector<std::vector<double>> {
+           int max_iterations = 50, bool verbose = false,
+           double base_power = 100e6) -> std::vector<std::vector<double>> {
             try {
                 // Convert basic types to internal structures
                 NetworkData network_data;
@@ -114,6 +115,7 @@ void init_solver_bindings(pybind11::module& m) {
                 config.tolerance = tolerance;
                 config.max_iterations = max_iterations;
                 config.verbose = verbose;
+                config.base_power = base_power;
 
                 // Create CPU solver and solve
                 auto solver = core::BackendFactory::create_powerflow_solver(BackendType::CPU);
@@ -167,7 +169,7 @@ void init_solver_bindings(pybind11::module& m) {
         },
         "Solve power flow using only basic Python types (ultra-minimal API)", py::arg("bus_data"),
         py::arg("branch_data"), py::arg("tolerance") = 1e-6, py::arg("max_iterations") = 50,
-        py::arg("verbose") = false,
+        py::arg("verbose") = false, py::arg("base_power") = 100e6,
         R"(
           Solve power flow using only basic Python lists and numbers.
           
@@ -190,6 +192,7 @@ void init_solver_bindings(pybind11::module& m) {
               tolerance: Convergence tolerance (default: 1e-6)
               max_iterations: Maximum iterations (default: 50)
               verbose: Enable verbose output (default: False)
+              base_power: Base power for per-unit system in VA (default: 100e6 = 100 MVA)
           
           Returns:
               List of voltage results, each voltage: [real, imag, magnitude, angle_rad]

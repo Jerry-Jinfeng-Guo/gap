@@ -1,0 +1,21 @@
+{
+  "name": "Simple 2-Bus Test Case",
+  "description": "Minimal 2-bus system with one slack bus and one load bus. Used for basic solver verification.",
+  "network_type": "test",
+  "topology": "simple",
+  "n_node": 2,
+  "n_line": 1,
+  "n_load": 1,
+  "voltage_level_kv": 10.0,
+  "base_voltage": 10000.0,
+  "frequency": 50.0,
+  "base_power_va": 100000000.0,
+  "notes": [
+    "Simplest possible power flow case for sanity checking",
+    "Should converge in very few iterations"
+  ],
+  "validation_criteria": {
+    "voltage_magnitude_tolerance_pu": 0.0001,
+    "convergence_required": true
+  }
+}

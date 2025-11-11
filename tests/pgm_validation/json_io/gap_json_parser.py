@@ -223,10 +223,16 @@ class PGMJSONParser:
             "status": status,
             "r1": line_df["r1"].values.astype(Float),
             "x1": line_df["x1"].values.astype(Float),
-            "c1": line_df.get("c1", np.zeros(len(line_df))).values.astype(Float),
-            "length_km": line_df.get("length_km", np.ones(len(line_df))).values.astype(
-                Float
-            ),
+            "c1": (
+                line_df["c1"].values
+                if "c1" in line_df.columns
+                else np.zeros(len(line_df))
+            ).astype(Float),
+            "length_km": (
+                line_df["length_km"].values
+                if "length_km" in line_df.columns
+                else np.ones(len(line_df))
+            ).astype(Float),
         }
 
     def _parse_loads(

@@ -133,7 +133,17 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                                             ComplexVector const& bus_voltages,
                                             SparseMatrix const& admittance_matrix) override {
         // Public interface - uses default base_power of 100 MVA
-        return calculate_mismatches_impl(network_data, bus_voltages, admittance_matrix, 100e6);
+        Float base_power = 100e6;
+        auto mismatches_pu =
+            calculate_mismatches_impl(network_data, bus_voltages, admittance_matrix, base_power);
+
+        // Convert from per-unit back to absolute units (Watts) for backward compatibility
+        std::vector<Float> mismatches_abs(mismatches_pu.size());
+        for (size_t i = 0; i < mismatches_pu.size(); ++i) {
+            mismatches_abs[i] = mismatches_pu[i] * base_power;
+        }
+
+        return mismatches_abs;
     }
 
   private:

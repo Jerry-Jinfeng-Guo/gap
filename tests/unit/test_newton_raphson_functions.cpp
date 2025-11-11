@@ -46,6 +46,7 @@ NetworkData create_simple_network() {
                     .reactive_power = 0.0};
 
     // Bus 2: Load bus (PQ)
+    // Note: Power is specified via appliances, not directly on bus
     BusData bus2 = {
         .id = 2,
         .u_rated = 230000.0,
@@ -54,8 +55,8 @@ NetworkData create_simple_network() {
         .u = 230000.0,
         .u_pu = 1.0,
         .u_angle = 0.0,
-        .active_power = 50e6,   // 50 MW load
-        .reactive_power = 30e6  // 30 MVAr load
+        .active_power = 0.0,   // Power specified via appliances below
+        .reactive_power = 0.0  // Power specified via appliances below
     };
 
     network.buses = {bus1, bus2};

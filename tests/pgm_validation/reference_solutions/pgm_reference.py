@@ -74,8 +74,10 @@ class PGMReferenceSolver:
         with open(input_file, "r") as f:
             input_data = json.load(f)
 
-        # Convert to PGM format
-        pgm_input = self._convert_to_pgm_input(input_data)
+        # Convert to PGM input format
+        # Handle both wrapped {"data": {...}} and unwrapped {...} formats
+        data_to_convert = input_data.get("data", input_data)
+        pgm_input = self._convert_to_pgm_input(data_to_convert)
 
         # Validate input data
         validation_errors = validate_input_data(pgm_input)

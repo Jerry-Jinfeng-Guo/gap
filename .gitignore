@@ -55,7 +55,6 @@ output*.json
 *.out
 
 # Debug files
-core
 *.dmp
 *.pdb
 

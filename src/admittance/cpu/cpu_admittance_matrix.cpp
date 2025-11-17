@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <memory>
 #include <vector>
@@ -9,9 +10,38 @@
 namespace gap::admittance {
 
 class CPUAdmittanceMatrix : public IAdmittanceMatrix {
+  private:
+    // Triplet: sparse matrix element for efficient construction
+    struct Triplet {
+        int row;
+        int col;
+        Complex value;
+
+        // Sort by (row, col) for CSR format
+        bool operator<(const Triplet& other) const {
+            if (row != other.row) return row < other.row;
+            return col < other.col;
+        }
+    };
+
+    // Construction statistics for debugging
+    struct ConstructionStats {
+        double build_time_ms = 0.0;
+        size_t triplets_allocated = 0;
+        size_t triplets_used = 0;
+        size_t final_nnz = 0;
+        size_t memory_bytes = 0;
+    };
+
+    mutable ConstructionStats last_stats_;
+
   public:
+    // Get construction statistics (for debugging/profiling)
+    ConstructionStats get_construction_stats() const { return last_stats_; }
     std::unique_ptr<SparseMatrix> build_admittance_matrix(
         NetworkData const& network_data) override {
+        auto start_time = std::chrono::high_resolution_clock::now();
+
         auto& logger = gap::logging::global_logger;
         logger.setComponent("CPUAdmittanceMatrix");
         LOG_INFO(logger, "Building admittance matrix");
@@ -20,7 +50,6 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         LOG_INFO(logger, "  Number of appliances:", network_data.appliances.size());
 
         // Auto-detect bus ID scheme and create mapping
-        // Strategy: Check if bus IDs are 0-based (start from 0) or 1-based (start from 1)
         int min_bus_id = network_data.num_buses;
         int max_bus_id = -1;
 
@@ -29,11 +58,10 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
             max_bus_id = std::max(max_bus_id, bus.id);
         }
 
-        // Determine ID offset: if IDs start from 0, offset=0; if from 1, offset=1
         int id_offset = min_bus_id;
 
         // Create ID-to-index mapping for robust lookup
-        std::vector<int> id_to_idx(max_bus_id + 1, -1);  // Initialize with -1 (invalid)
+        std::vector<int> id_to_idx(max_bus_id + 1, -1);
         for (size_t idx = 0; idx < network_data.buses.size(); ++idx) {
             int bus_id = network_data.buses[idx].id;
             if (bus_id >= 0 && bus_id <= max_bus_id) {
@@ -43,38 +71,35 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
 
         LOG_INFO(logger, "  Bus ID range: [", min_bus_id, ",", max_bus_id, "], offset:", id_offset);
 
-        auto matrix = std::make_unique<SparseMatrix>();
-        matrix->num_rows = network_data.num_buses;
-        matrix->num_cols = network_data.num_buses;
+        // === OPTIMIZATION: Triplet-based accumulation ===
+        // Estimate non-zeros: diagonal (n) + branches (2 per branch, bidirectional)
+        size_t estimated_nnz = network_data.num_buses + 2 * network_data.num_branches;
+        std::vector<Triplet> triplets;
+        triplets.reserve(estimated_nnz);
 
-        // Initialize diagonal admittance accumulator for each bus
-        std::vector<Complex> diagonal_elements(network_data.num_buses, Complex(0.0, 0.0));
-        std::vector<std::vector<std::pair<int, Complex>>> off_diagonal_elements(
-            network_data.num_buses);
+        last_stats_.triplets_allocated = estimated_nnz;
 
-        // Process shunt appliances (capacitors, reactors) first
+        // Accumulate diagonal elements from shunt appliances
+        std::vector<Complex> diagonal_accumulator(network_data.num_buses, Complex(0.0, 0.0));
+
         for (auto const& appliance : network_data.appliances) {
             if (appliance.type == ApplianceType::SHUNT) {
-                // Use mapping instead of assuming offset
                 if (appliance.node >= 0 && appliance.node <= max_bus_id) {
                     int bus_idx = id_to_idx[appliance.node];
                     if (bus_idx >= 0 && bus_idx < network_data.num_buses) {
-                        // Add shunt admittance to diagonal element
-                        diagonal_elements[bus_idx] += Complex(appliance.g1, appliance.b1);
+                        diagonal_accumulator[bus_idx] += Complex(appliance.g1, appliance.b1);
                     }
                 }
             }
         }
 
-        // Iterate over all branches to build admittance matrix
+        // Process branches and accumulate admittances as triplets
         for (auto const& branch : network_data.branches) {
             if (!branch.status) {
-                continue;  // Skip out-of-service branches
+                continue;
             }
 
-            // Use mapping for robust ID-to-index conversion
             int from_bus = -1, to_bus = -1;
-
             if (branch.from_bus >= 0 && branch.from_bus <= max_bus_id) {
                 from_bus = id_to_idx[branch.from_bus];
             }
@@ -82,7 +107,6 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
                 to_bus = id_to_idx[branch.to_bus];
             }
 
-            // Validate indices
             if (from_bus < 0 || from_bus >= network_data.num_buses || to_bus < 0 ||
                 to_bus >= network_data.num_buses) {
                 LOG_WARN(logger, "  Skipping branch", branch.id,
@@ -90,80 +114,83 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
                 continue;
             }
 
-            // Calculate branch admittance from r1, x1, g1, b1 parameters
-            // Series impedance: Z = r1 + j*x1
-            // Series admittance: Y_series = 1/Z = g1_calc + j*b1_calc
-            // where g1_calc = r1/(r1^2 + x1^2) and b1_calc = -x1/(r1^2 + x1^2)
+            // Calculate branch admittance
             Float z_magnitude_sq = branch.r1 * branch.r1 + branch.x1 * branch.x1;
             Complex series_admittance;
-            if (z_magnitude_sq > 1e-12) {  // Avoid division by zero
+            if (z_magnitude_sq > 1e-12) {
                 series_admittance =
                     Complex(branch.r1 / z_magnitude_sq, -branch.x1 / z_magnitude_sq);
             } else {
-                series_admittance = Complex(0.0, 0.0);  // Open circuit
+                series_admittance = Complex(0.0, 0.0);
             }
 
-            // Add parallel conductance (g1 only, not b1 which is handled separately as line
-            // charging)
             Complex branch_admittance = series_admittance + Complex(branch.g1, 0.0);
+            Complex shunt_admittance = Complex(0.0, branch.b1 / 2.0);
 
-            // Add to diagonal elements (self-admittance)
-            // Include half of line charging susceptance (b1) at each end (π-model)
-            diagonal_elements[from_bus] += branch_admittance + Complex(0.0, branch.b1 / 2.0);
-            diagonal_elements[to_bus] += branch_admittance + Complex(0.0, branch.b1 / 2.0);
+            // Accumulate diagonal elements (self-admittance + shunt)
+            diagonal_accumulator[from_bus] += branch_admittance + shunt_admittance;
+            diagonal_accumulator[to_bus] += branch_admittance + shunt_admittance;
 
-            // Add off-diagonal elements (mutual admittance is negative, only series part)
-            off_diagonal_elements[from_bus].emplace_back(to_bus, -series_admittance);
-            off_diagonal_elements[to_bus].emplace_back(from_bus, -series_admittance);
+            // Add off-diagonal triplets (mutual admittance is negative)
+            triplets.push_back({from_bus, to_bus, -series_admittance});
+            triplets.push_back({to_bus, from_bus, -series_admittance});
         }
 
-        // Build CSR format sparse matrix
-        matrix->row_ptr.clear();
-        matrix->col_idx.clear();
-        matrix->values.clear();
+        // Add diagonal elements as triplets
+        for (int i = 0; i < network_data.num_buses; ++i) {
+            triplets.push_back({i, i, diagonal_accumulator[i]});
+        }
+
+        last_stats_.triplets_used = triplets.size();
+
+        // === OPTIMIZATION: Single sort, then direct CSR construction ===
+        std::sort(triplets.begin(), triplets.end());
+
+        // Build CSR format directly from sorted triplets
+        auto matrix = std::make_unique<SparseMatrix>();
+        matrix->num_rows = network_data.num_buses;
+        matrix->num_cols = network_data.num_buses;
+
+        // Pre-allocate CSR arrays
+        matrix->col_idx.reserve(triplets.size());
+        matrix->values.reserve(triplets.size());
         matrix->row_ptr.reserve(network_data.num_buses + 1);
 
-        int nnz = 0;
+        int current_row = 0;
         matrix->row_ptr.push_back(0);
 
-        for (int i = 0; i < network_data.num_buses; ++i) {
-            // Sort off-diagonal elements by column index
-            std::sort(off_diagonal_elements[i].begin(), off_diagonal_elements[i].end(),
-                      [](const std::pair<int, std::complex<Float>>& a,
-                         const std::pair<int, std::complex<Float>>& b) {
-                          return a.first < b.first;  // Sort by column index only
-                      });
-
-            // Build complete row with proper column ordering
-            std::vector<std::pair<int, Complex>> row_elements;
-
-            // Add diagonal element
-            row_elements.emplace_back(i, diagonal_elements[i]);
-
-            // Add off-diagonal elements
-            for (auto const& [col, value] : off_diagonal_elements[i]) {
-                row_elements.emplace_back(col, value);
+        for (const auto& triplet : triplets) {
+            // Fill row_ptr for any empty rows
+            while (current_row < triplet.row) {
+                matrix->row_ptr.push_back(static_cast<int>(matrix->col_idx.size()));
+                current_row++;
             }
 
-            // Sort all elements (diagonal + off-diagonal) by column index
-            std::sort(row_elements.begin(), row_elements.end(),
-                      [](const std::pair<int, Complex>& a, const std::pair<int, Complex>& b) {
-                          return a.first < b.first;
-                      });
-
-            // Add sorted elements to CSR arrays
-            for (auto const& [col, value] : row_elements) {
-                matrix->col_idx.push_back(col);
-                matrix->values.push_back(value);
-                nnz++;
-            }
-
-            matrix->row_ptr.push_back(nnz);
+            matrix->col_idx.push_back(triplet.col);
+            matrix->values.push_back(triplet.value);
         }
 
-        matrix->nnz = nnz;
+        // Fill remaining row_ptr entries
+        while (current_row < network_data.num_buses) {
+            matrix->row_ptr.push_back(static_cast<int>(matrix->col_idx.size()));
+            current_row++;
+        }
+
+        matrix->nnz = static_cast<int>(matrix->values.size());
+        last_stats_.final_nnz = matrix->nnz;
+        last_stats_.memory_bytes = matrix->values.size() * sizeof(Complex) +
+                                   matrix->col_idx.size() * sizeof(int) +
+                                   matrix->row_ptr.size() * sizeof(int);
+
+        auto end_time = std::chrono::high_resolution_clock::now();
+        last_stats_.build_time_ms =
+            std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
         LOG_INFO(logger, "  Matrix constructed with", matrix->nnz, "non-zero elements");
+        LOG_DEBUG(logger, "  Build time:", last_stats_.build_time_ms, "ms");
+        LOG_DEBUG(logger, "  Triplets: allocated", last_stats_.triplets_allocated, "used",
+                  last_stats_.triplets_used);
+
         return matrix;
     }
 
@@ -174,22 +201,38 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         LOG_INFO(logger, "Updating admittance matrix");
         LOG_INFO(logger, "  Branch changes:", branch_changes.size());
 
+        // Create a copy of the matrix
         auto updated_matrix = std::make_unique<SparseMatrix>(matrix);
 
-        // Iterate over each branch change to update the matrix
+        // For each branch change, find and update the affected matrix elements
         for (auto const& branch_change : branch_changes) {
-            int from_bus = branch_change.from_bus - 1;  // Convert to 0-based indexing
-            int to_bus = branch_change.to_bus - 1;      // Convert to 0-based indexing
+            // Note: Assuming 0-based indexing for consistency with build_admittance_matrix
+            // If branch_change uses 1-based, adjust here
+            int from_bus = branch_change.from_bus;
+            int to_bus = branch_change.to_bus;
 
-            LOG_DEBUG(logger, "  Updating branch", branch_change.from_bus, "->",
-                      branch_change.to_bus,
+            // Check if we need to convert from 1-based to 0-based
+            if (from_bus > 0 && to_bus > 0 &&
+                (from_bus > updated_matrix->num_rows || to_bus > updated_matrix->num_rows)) {
+                from_bus -= 1;
+                to_bus -= 1;
+            }
+
+            if (from_bus < 0 || from_bus >= updated_matrix->num_rows || to_bus < 0 ||
+                to_bus >= updated_matrix->num_rows) {
+                LOG_WARN(logger, "  Skipping branch update with invalid indices:", from_bus, "→",
+                         to_bus);
+                continue;
+            }
+
+            LOG_DEBUG(logger, "  Updating branch", from_bus, "→", to_bus,
                       "(status:", (branch_change.status ? "in-service" : "out-of-service"), ")");
 
-            // Calculate branch admittance change using new r1, x1, g1, b1 parameters
-            Complex series_admittance_change = Complex(0.0, 0.0);
+            // Calculate branch admittance change
             Float z_magnitude_sq =
                 branch_change.r1 * branch_change.r1 + branch_change.x1 * branch_change.x1;
-            if (z_magnitude_sq > 1e-12) {  // Avoid division by zero
+            Complex series_admittance_change = Complex(0.0, 0.0);
+            if (z_magnitude_sq > 1e-12) {
                 series_admittance_change =
                     Complex(branch_change.r1 / z_magnitude_sq, -branch_change.x1 / z_magnitude_sq);
             }
@@ -203,32 +246,45 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
                 series_admittance_change = -series_admittance_change;
             }
 
-            // Update diagonal elements (self-admittance changes)
             Complex shunt_change = Complex(0.0, branch_change.b1 / 2.0);
             if (!branch_change.status) {
-                shunt_change = -shunt_change;  // Remove shunt if going out of service
+                shunt_change = -shunt_change;
             }
 
-            // Find and update matrix elements
-            // This is a simplified approach - in practice, we'd need more efficient sparse matrix
-            // updates
-            for (int row = 0; row < updated_matrix->num_rows; ++row) {
-                int start_idx = updated_matrix->row_ptr[row];
-                int end_idx = updated_matrix->row_ptr[row + 1];
+            // === OPTIMIZATION: Direct CSR lookup instead of full scan ===
+            // Update diagonal elements for from_bus
+            for (int idx = updated_matrix->row_ptr[from_bus];
+                 idx < updated_matrix->row_ptr[from_bus + 1]; ++idx) {
+                if (updated_matrix->col_idx[idx] == from_bus) {
+                    updated_matrix->values[idx] += total_admittance_change + shunt_change;
+                    break;
+                }
+            }
 
-                for (int idx = start_idx; idx < end_idx; ++idx) {
-                    int col = updated_matrix->col_idx[idx];
+            // Update diagonal elements for to_bus
+            for (int idx = updated_matrix->row_ptr[to_bus];
+                 idx < updated_matrix->row_ptr[to_bus + 1]; ++idx) {
+                if (updated_matrix->col_idx[idx] == to_bus) {
+                    updated_matrix->values[idx] += total_admittance_change + shunt_change;
+                    break;
+                }
+            }
 
-                    // Update diagonal elements
-                    if (row == col && (row == from_bus || row == to_bus)) {
-                        updated_matrix->values[idx] += total_admittance_change + shunt_change;
-                    }
-                    // Update off-diagonal elements (only series admittance)
-                    else if ((row == from_bus && col == to_bus) ||
-                             (row == to_bus && col == from_bus)) {
-                        updated_matrix->values[idx] -=
-                            series_admittance_change;  // Off-diagonal is negative
-                    }
+            // Update off-diagonal element (from_bus, to_bus)
+            for (int idx = updated_matrix->row_ptr[from_bus];
+                 idx < updated_matrix->row_ptr[from_bus + 1]; ++idx) {
+                if (updated_matrix->col_idx[idx] == to_bus) {
+                    updated_matrix->values[idx] -= series_admittance_change;
+                    break;
+                }
+            }
+
+            // Update off-diagonal element (to_bus, from_bus)
+            for (int idx = updated_matrix->row_ptr[to_bus];
+                 idx < updated_matrix->row_ptr[to_bus + 1]; ++idx) {
+                if (updated_matrix->col_idx[idx] == from_bus) {
+                    updated_matrix->values[idx] -= series_admittance_change;
+                    break;
                 }
             }
         }

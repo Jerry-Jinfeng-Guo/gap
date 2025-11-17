@@ -18,7 +18,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         Complex value;
 
         // Sort by (row, col) for CSR format
-        bool operator<(const Triplet& other) const {
+        bool operator<(Triplet const& other) const {
             if (row != other.row) return row < other.row;
             return col < other.col;
         }
@@ -159,7 +159,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         int current_row = 0;
         matrix->row_ptr.push_back(0);
 
-        for (const auto& triplet : triplets) {
+        for (auto const& triplet : triplets) {
             // Fill row_ptr for any empty rows
             while (current_row < triplet.row) {
                 matrix->row_ptr.push_back(static_cast<int>(matrix->col_idx.size()));

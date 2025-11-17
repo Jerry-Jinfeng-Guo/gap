@@ -204,7 +204,7 @@ class CPULUSolver : public ILUSolver {
     /**
      * @brief Check if matrix sparsity pattern matches cached pattern
      */
-    bool pattern_matches_cache(const SparseMatrix& matrix) const {
+    bool pattern_matches_cache(SparseMatrix const& matrix) const {
         if (!symbolic_cache_.valid) {
             return false;
         }
@@ -231,7 +231,7 @@ class CPULUSolver : public ILUSolver {
         return true;
     }
 
-    void cache_pattern(const SparseMatrix& matrix) {
+    void cache_pattern(SparseMatrix const& matrix) {
         symbolic_cache_.pattern_row_ptr = matrix.row_ptr;
         symbolic_cache_.pattern_col_idx = matrix.col_idx;
         symbolic_cache_.cached_size = matrix.num_rows;
@@ -243,7 +243,7 @@ class CPULUSolver : public ILUSolver {
      * @brief Phase 1: Symbolic Analysis
      * Analyze sparsity pattern and predict fill-in locations
      */
-    bool perform_symbolic_analysis(const SparseMatrix& matrix) {
+    bool perform_symbolic_analysis(SparseMatrix const& matrix) {
         auto& logger = gap::logging::global_logger;
         logger.setComponent("CPULUSolver");
 
@@ -377,7 +377,7 @@ class CPULUSolver : public ILUSolver {
      * @brief Phase 2: Numerical Factorization
      * Perform sparse Gaussian elimination with threshold pivoting
      */
-    bool perform_numerical_factorization(const SparseMatrix& matrix) {
+    bool perform_numerical_factorization(SparseMatrix const& matrix) {
         auto& logger = gap::logging::global_logger;
         logger.setComponent("CPULUSolver");
         LOG_INFO(logger, "  Phase 2: Numerical factorization...");
@@ -401,9 +401,53 @@ class CPULUSolver : public ILUSolver {
 
   private:
     /**
+     * @brief Helper: Binary search to find element in sorted row (Phase 3)
+     */
+    static auto find_in_row(std::vector<std::pair<int, Complex>>& row, int col) {
+        return std::lower_bound(row.begin(), row.end(), col,
+                                [](auto const& p, int c) { return p.first < c; });
+    }
+
+    /**
+     * @brief Helper: Get element value from row, returns 0 if not found (Phase 3)
+     */
+    static Complex get_element(std::vector<std::pair<int, Complex>> const& row, int col) {
+        auto it = std::lower_bound(row.begin(), row.end(), col,
+                                   [](auto const& p, int c) { return p.first < c; });
+        if (it != row.end() && it->first == col) {
+            return it->second;
+        }
+        return Complex(0.0, 0.0);
+    }
+
+    /**
+     * @brief Helper: Set element in row, maintaining sorted order (Phase 3)
+     */
+    static void set_element(std::vector<std::pair<int, Complex>>& row, int col, Complex val) {
+        auto it = std::lower_bound(row.begin(), row.end(), col,
+                                   [](auto const& p, int c) { return p.first < c; });
+        if (it != row.end() && it->first == col) {
+            it->second = val;  // Update existing
+        } else {
+            row.insert(it, {col, val});  // Insert new
+        }
+    }
+
+    /**
+     * @brief Helper: Remove element from row if it exists (Phase 3)
+     */
+    static void erase_element(std::vector<std::pair<int, Complex>>& row, int col) {
+        auto it = std::lower_bound(row.begin(), row.end(), col,
+                                   [](auto const& p, int c) { return p.first < c; });
+        if (it != row.end() && it->first == col) {
+            row.erase(it);
+        }
+    }
+
+    /**
      * @brief Sparse LU factorization using symbolic structure
      */
-    bool perform_sparse_factorization(const SparseMatrix& matrix) {
+    bool perform_sparse_factorization(SparseMatrix const& matrix) {
         auto& logger = gap::logging::global_logger;
         logger.setComponent("CPULUSolver");
 
@@ -413,13 +457,16 @@ class CPULUSolver : public ILUSolver {
         std::iota(numerical_.pivot_row.begin(), numerical_.pivot_row.end(), 0);
         std::iota(numerical_.pivot_col.begin(), numerical_.pivot_col.end(), 0);
 
-        // Copy input matrix to working structure
-        std::vector<std::map<int, Complex>> sparse_rows(matrix_size_);
+        // Copy input matrix to working structure (Phase 3: use vectors instead of maps)
+        // Each row stores pairs of (column, value) in sorted order by column
+        std::vector<std::vector<std::pair<int, Complex>>> sparse_rows(matrix_size_);
         for (int row = 0; row < matrix_size_; ++row) {
+            int row_nnz = matrix.row_ptr[row + 1] - matrix.row_ptr[row];
+            sparse_rows[row].reserve(row_nnz * 2);  // Reserve space for fill-in
             for (int idx = matrix.row_ptr[row]; idx < matrix.row_ptr[row + 1]; ++idx) {
-                int col = matrix.col_idx[idx];
-                sparse_rows[row][col] = matrix.values[idx];
+                sparse_rows[row].emplace_back(matrix.col_idx[idx], matrix.values[idx]);
             }
+            // Already sorted from CSR format
         }
 
         // Perform Doolittle LU factorization with partial pivoting: PA = LU
@@ -430,13 +477,11 @@ class CPULUSolver : public ILUSolver {
             Float max_pivot = 0.0;
 
             for (int i = k; i < matrix_size_; ++i) {
-                auto it = sparse_rows[i].find(k);
-                if (it != sparse_rows[i].end()) {
-                    Float abs_val = std::abs(it->second);
-                    if (abs_val > max_pivot) {
-                        max_pivot = abs_val;
-                        pivot_row = i;
-                    }
+                Complex val = get_element(sparse_rows[i], k);
+                Float abs_val = std::abs(val);
+                if (abs_val > max_pivot) {
+                    max_pivot = abs_val;
+                    pivot_row = i;
                 }
             }
 
@@ -456,28 +501,22 @@ class CPULUSolver : public ILUSolver {
                 std::swap(numerical_.pivot_row[k], numerical_.pivot_row[pivot_row]);
             }
 
-            Complex pivot = sparse_rows[k][k];  // After swap, pivot is at [k][k]
+            Complex pivot = get_element(sparse_rows[k], k);  // After swap, pivot is at [k][k]
 
             // Pivoting performed (logging disabled for performance)
 
             // For each row i > k that has non-zero in column k
             for (int i = k + 1; i < matrix_size_; ++i) {
-                auto it_ik = sparse_rows[i].find(k);
-                if (it_ik == sparse_rows[i].end()) {
-                    continue;  // A(i,k) is already zero
-                }
-
-                Complex a_ik = it_ik->second;
+                Complex a_ik = get_element(sparse_rows[i], k);
                 if (std::abs(a_ik) < drop_tolerance_) {
-                    sparse_rows[i].erase(it_ik);
-                    continue;
+                    continue;  // A(i,k) is effectively zero
                 }
 
                 // Compute multiplier L(i,k) = A(i,k) / U(k,k)
                 Complex multiplier = a_ik / pivot;
 
                 // Store L(i,k) - overwrite A(i,k) with the multiplier
-                it_ik->second = multiplier;
+                set_element(sparse_rows[i], k, multiplier);
 
                 // Update row i: A(i,j) -= L(i,k) * U(k,j) for all j > k
                 // We need to be careful not to iterate and modify sparse_rows[k] simultaneously
@@ -492,16 +531,13 @@ class CPULUSolver : public ILUSolver {
                 for (auto const& [j, u_kj] : row_k_upper) {
                     Complex update = multiplier * u_kj;
 
-                    auto it_ij = sparse_rows[i].find(j);
-                    if (it_ij != sparse_rows[i].end()) {
-                        // Element exists, update it
-                        it_ij->second -= update;
-                        if (std::abs(it_ij->second) < drop_tolerance_) {
-                            sparse_rows[i].erase(it_ij);
-                        }
-                    } else if (std::abs(update) > drop_tolerance_) {
-                        // Fill-in: create new non-zero
-                        sparse_rows[i][j] = -update;
+                    Complex a_ij = get_element(sparse_rows[i], j);
+                    Complex new_val = a_ij - update;
+
+                    if (std::abs(new_val) > drop_tolerance_) {
+                        set_element(sparse_rows[i], j, new_val);
+                    } else if (std::abs(a_ij) > 0) {
+                        erase_element(sparse_rows[i], j);  // Drop small element
                     }
                 }
             }
@@ -580,7 +616,7 @@ class CPULUSolver : public ILUSolver {
     /**
      * @brief Dense LU factorization for small matrices (backward compatibility)
      */
-    bool perform_dense_factorization(const SparseMatrix& matrix) {
+    bool perform_dense_factorization(SparseMatrix const& matrix) {
         auto& logger = gap::logging::global_logger;
         logger.setComponent("CPULUSolver");
 
@@ -706,7 +742,7 @@ class CPULUSolver : public ILUSolver {
     /**
      * @brief Apply row permutation: result = P * vector
      */
-    ComplexVector apply_row_permutation(const ComplexVector& vector) const {
+    ComplexVector apply_row_permutation(ComplexVector const& vector) const {
         ComplexVector result(vector.size());
         for (int i = 0; i < matrix_size_; ++i) {
             result[i] = vector[numerical_.pivot_row[i]];
@@ -717,7 +753,7 @@ class CPULUSolver : public ILUSolver {
     /**
      * @brief Apply inverse column permutation: result = Q^T * vector
      */
-    ComplexVector apply_column_permutation_inverse(const ComplexVector& vector) const {
+    ComplexVector apply_column_permutation_inverse(ComplexVector const& vector) const {
         ComplexVector result(vector.size());
         for (int i = 0; i < matrix_size_; ++i) {
             result[numerical_.pivot_col[i]] = vector[i];
@@ -729,7 +765,7 @@ class CPULUSolver : public ILUSolver {
      * @brief Forward substitution: solve L * y = b for y
      * L is unit lower triangular (diagonal elements = 1)
      */
-    ComplexVector forward_substitution(const ComplexVector& rhs) const {
+    ComplexVector forward_substitution(ComplexVector const& rhs) const {
         ComplexVector result(matrix_size_, Complex(0.0, 0.0));
 
         // Forward substitution: L * y = b
@@ -760,7 +796,7 @@ class CPULUSolver : public ILUSolver {
      * @brief Backward substitution: solve U * x = y for x
      * U is upper triangular with non-unit diagonal
      */
-    ComplexVector backward_substitution(const ComplexVector& rhs) const {
+    ComplexVector backward_substitution(ComplexVector const& rhs) const {
         ComplexVector result(matrix_size_, Complex(0.0, 0.0));
 
         // Backward substitution: U * x = y

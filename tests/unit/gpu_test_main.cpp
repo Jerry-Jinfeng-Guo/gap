@@ -8,6 +8,8 @@ using namespace gap::solver;
 
 // Forward declarations of test functions
 void test_gpu_admittance_functionality();
+void test_gpu_vs_cpu_admittance_simple();
+void test_gpu_vs_cpu_admittance_pgm_network();
 void test_gpu_lu_solver_functionality();
 void test_gpu_powerflow_functionality();
 void test_gpu_lu_solver_large_matrix();
@@ -21,6 +23,9 @@ int main() {
     try {
         // GPU Admittance tests
         test_gpu_admittance_functionality();
+        test_gpu_vs_cpu_admittance_simple();
+        test_gpu_vs_cpu_admittance_pgm_network();
+
         test_gpu_lu_solver_functionality();
         test_gpu_powerflow_functionality();
 

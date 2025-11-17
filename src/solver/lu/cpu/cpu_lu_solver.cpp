@@ -5,6 +5,7 @@
 #include <iostream>
 #include <map>
 #include <numeric>
+#include <ranges>
 #include <set>
 
 #include "gap/logging/logger.h"
@@ -404,16 +405,14 @@ class CPULUSolver : public ILUSolver {
      * @brief Helper: Binary search to find element in sorted row (Phase 3)
      */
     static auto find_in_row(std::vector<std::pair<int, Complex>>& row, int col) {
-        return std::lower_bound(row.begin(), row.end(), col,
-                                [](auto const& p, int c) { return p.first < c; });
+        return std::ranges::lower_bound(row, col, {}, &std::pair<int, Complex>::first);
     }
 
     /**
      * @brief Helper: Get element value from row, returns 0 if not found (Phase 3)
      */
-    static Complex get_element(std::vector<std::pair<int, Complex>> const& row, int col) {
-        auto it = std::lower_bound(row.begin(), row.end(), col,
-                                   [](auto const& p, int c) { return p.first < c; });
+    static Complex get_element(const std::vector<std::pair<int, Complex>>& row, int col) {
+        auto it = std::ranges::lower_bound(row, col, {}, &std::pair<int, Complex>::first);
         if (it != row.end() && it->first == col) {
             return it->second;
         }
@@ -424,8 +423,7 @@ class CPULUSolver : public ILUSolver {
      * @brief Helper: Set element in row, maintaining sorted order (Phase 3)
      */
     static void set_element(std::vector<std::pair<int, Complex>>& row, int col, Complex val) {
-        auto it = std::lower_bound(row.begin(), row.end(), col,
-                                   [](auto const& p, int c) { return p.first < c; });
+        auto it = std::ranges::lower_bound(row, col, {}, &std::pair<int, Complex>::first);
         if (it != row.end() && it->first == col) {
             it->second = val;  // Update existing
         } else {
@@ -437,8 +435,7 @@ class CPULUSolver : public ILUSolver {
      * @brief Helper: Remove element from row if it exists (Phase 3)
      */
     static void erase_element(std::vector<std::pair<int, Complex>>& row, int col) {
-        auto it = std::lower_bound(row.begin(), row.end(), col,
-                                   [](auto const& p, int c) { return p.first < c; });
+        auto it = std::ranges::lower_bound(row, col, {}, &std::pair<int, Complex>::first);
         if (it != row.end() && it->first == col) {
             row.erase(it);
         }
@@ -562,8 +559,7 @@ class CPULUSolver : public ILUSolver {
                     lower_elements.push_back({col, value});
                 }
             }
-            std::sort(lower_elements.begin(), lower_elements.end(),
-                      [](auto const& a, auto const& b) { return a.first < b.first; });
+            std::ranges::sort(lower_elements, {}, &std::pair<int, Complex>::first);
 
             // Add in sorted order
             for (auto const& [col, value] : lower_elements) {
@@ -591,8 +587,7 @@ class CPULUSolver : public ILUSolver {
                     upper_elements.push_back({col, value});
                 }
             }
-            std::sort(upper_elements.begin(), upper_elements.end(),
-                      [](auto const& a, auto const& b) { return a.first < b.first; });
+            std::ranges::sort(upper_elements, {}, &std::pair<int, Complex>::first);
 
             // Add in sorted order
             for (auto const& [col, value] : upper_elements) {

@@ -2,6 +2,7 @@
 #include <chrono>
 #include <iostream>
 #include <memory>
+#include <ranges>
 #include <vector>
 
 #include "gap/admittance/admittance_interface.h"
@@ -22,6 +23,8 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
             if (row != other.row) return row < other.row;
             return col < other.col;
         }
+
+        bool operator==(Triplet const& other) const { return row == other.row && col == other.col; }
     };
 
     // Construction statistics for debugging
@@ -144,7 +147,10 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
         last_stats_.triplets_used = triplets.size();
 
         // === OPTIMIZATION: Single sort, then direct CSR construction ===
-        std::sort(triplets.begin(), triplets.end());
+        std::ranges::sort(triplets, [](const Triplet& a, const Triplet& b) {
+            if (a.row != b.row) return a.row < b.row;
+            return a.col < b.col;
+        });
 
         // Build CSR format directly from sorted triplets
         auto matrix = std::make_unique<SparseMatrix>();

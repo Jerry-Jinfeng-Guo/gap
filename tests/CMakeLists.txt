@@ -44,6 +44,26 @@ target_link_libraries(gap_validation_tests
 add_test(NAME UnitTests COMMAND gap_unit_tests)
 add_test(NAME ValidationTests COMMAND gap_validation_tests)
 
+# Python validation tests using pytest
+find_program(PYTEST_EXECUTABLE pytest)
+if(PYTEST_EXECUTABLE)
+    add_test(
+        NAME PGMValidationTests
+        COMMAND ${PYTEST_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pgm_validation/test_pgm_validation.py -v
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    
+    # Set PYTHONPATH to include the build directory with gap_solver module
+    set_tests_properties(PGMValidationTests PROPERTIES
+        ENVIRONMENT "PYTHONPATH=${CMAKE_BINARY_DIR}/lib:$ENV{PYTHONPATH}"
+    )
+    
+    message(STATUS "pytest found: ${PYTEST_EXECUTABLE}")
+    message(STATUS "PGM validation tests will be available via CTest")
+else()
+    message(WARNING "pytest not found. PGM validation tests will not be available via CTest. Install with: pip install pytest")
+endif()
+
 # GPU tests (only if CUDA is enabled)
 if(GAP_ENABLE_CUDA)
     add_executable(gap_gpu_tests

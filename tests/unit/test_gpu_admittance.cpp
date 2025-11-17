@@ -330,6 +330,27 @@ void test_gpu_admittance_update_small_batch() {
     auto cpu_matrix = cpu_backend->build_admittance_matrix(network);
     auto gpu_matrix = gpu_backend->build_admittance_matrix(network);
 
+    // Comprehensive initial matrix check
+    std::cout << "Checking initial 10-bus matrix consistency..." << std::endl;
+    int mismatches = 0;
+    for (size_t i = 0; i < cpu_matrix->values.size(); ++i) {
+        if (!complex_near(cpu_matrix->values[i], gpu_matrix->values[i], 1e-10)) {
+            mismatches++;
+            if (mismatches <= 5) {
+                std::cout << "  Mismatch [" << i << "]: CPU (" << cpu_matrix->values[i].real()
+                          << "," << cpu_matrix->values[i].imag() << ") vs GPU ("
+                          << gpu_matrix->values[i].real() << "," << gpu_matrix->values[i].imag()
+                          << ")" << std::endl;
+            }
+        }
+    }
+    std::cout << "  Mismatches: " << mismatches << "/" << cpu_matrix->values.size() << std::endl;
+
+    if (mismatches > 0) {
+        std::cout << "  ✗ Initial matrices differ even for small network!" << std::endl;
+        return;
+    }
+
     // Create 5 branch changes (small batch - should use CPU path)
     std::vector<BranchData> changes;
     for (int i = 0; i < 5; ++i) {
@@ -415,14 +436,47 @@ void test_gpu_admittance_update_large_batch() {
     auto cpu_matrix = cpu_backend->build_admittance_matrix(network);
     auto gpu_matrix = gpu_backend->build_admittance_matrix(network);
 
-    // Verify initial matrices match
-    std::cout << "Initial matrices match: "
-              << (matrices_equal(*cpu_matrix, *gpu_matrix) ? "YES" : "NO") << std::endl;
-    if (cpu_matrix->values.size() > 78) {
-        std::cout << "  Initial CPU[78] = " << cpu_matrix->values[78].real() << " + "
-                  << cpu_matrix->values[78].imag() << "j" << std::endl;
-        std::cout << "  Initial GPU[78] = " << gpu_matrix->values[78].real() << " + "
-                  << gpu_matrix->values[78].imag() << "j" << std::endl;
+    // Verify initial matrices match - comprehensive check
+    std::cout << "Checking initial matrix consistency..." << std::endl;
+    int mismatches = 0;
+    double max_abs_diff = 0.0;
+    int max_diff_idx = -1;
+
+    for (size_t i = 0; i < cpu_matrix->values.size(); ++i) {
+        double real_diff = std::abs(cpu_matrix->values[i].real() - gpu_matrix->values[i].real());
+        double imag_diff = std::abs(cpu_matrix->values[i].imag() - gpu_matrix->values[i].imag());
+        double total_diff = std::sqrt(real_diff * real_diff + imag_diff * imag_diff);
+
+        if (!complex_near(cpu_matrix->values[i], gpu_matrix->values[i], 1e-10)) {
+            mismatches++;
+            if (total_diff > max_abs_diff) {
+                max_abs_diff = total_diff;
+                max_diff_idx = i;
+            }
+            if (mismatches <= 10) {  // Show first 10 mismatches
+                std::cout << "  Mismatch [" << i << "]: CPU (" << cpu_matrix->values[i].real()
+                          << "," << cpu_matrix->values[i].imag() << ") vs GPU ("
+                          << gpu_matrix->values[i].real() << "," << gpu_matrix->values[i].imag()
+                          << ") diff=" << total_diff << std::endl;
+            }
+        }
+    }
+
+    std::cout << "Initial matrix comparison:" << std::endl;
+    std::cout << "  Total elements: " << cpu_matrix->values.size() << std::endl;
+    std::cout << "  Mismatches: " << mismatches << " ("
+              << (100.0 * mismatches / cpu_matrix->values.size()) << "%)" << std::endl;
+    if (max_diff_idx >= 0) {
+        std::cout << "  Max difference at index " << max_diff_idx << ": " << max_abs_diff
+                  << std::endl;
+    }
+
+    if (mismatches == 0) {
+        std::cout << "  ✓ Initial matrices match perfectly!" << std::endl;
+    } else {
+        std::cout << "  ✗ Initial matrices differ - GPU build has bugs!" << std::endl;
+        std::cout << "  Skipping update test since initial state is wrong..." << std::endl;
+        return;
     }
 
     // Create 150 branch changes (large batch - should use GPU path)

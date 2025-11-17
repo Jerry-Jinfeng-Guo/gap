@@ -139,12 +139,6 @@ __global__ void update_admittance_matrix_kernel(const gap::BranchData* branch_ch
     int from_bus = branch.from_bus;
     int to_bus = branch.to_bus;
 
-    // Debug: Print first thread info
-    if (idx == 0) {
-        printf("GPU Update Kernel: Processing %d changes, from_bus=%d, to_bus=%d, status=%d\n",
-               num_changes, from_bus, to_bus, (int)branch.status);
-    }
-
     // Validate bus indices
     if (from_bus < 0 || from_bus >= num_rows || to_bus < 0 || to_bus >= num_rows) {
         return;
@@ -182,12 +176,6 @@ __global__ void update_admittance_matrix_kernel(const gap::BranchData* branch_ch
     if (diag_from_idx >= 0) {
         atomicAdd(&values[diag_from_idx].x, diagonal_change.x);
         atomicAdd(&values[diag_from_idx].y, diagonal_change.y);
-        if (idx < 5) {  // Debug first 5 threads
-            printf("  Thread %d: Updated diag[%d,%d] at idx=%d with (%f,%f)\n", idx, from_bus,
-                   from_bus, diag_from_idx, diagonal_change.x, diagonal_change.y);
-        }
-    } else if (idx < 5) {
-        printf("  Thread %d: NOT FOUND diag[%d,%d]\n", idx, from_bus, from_bus);
     }
 
     // Update diagonal element (to_bus, to_bus)
@@ -368,10 +356,12 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
                      d_triplets.begin() + diagonal_offset);
 
         // === Step 6: Sort triplets by (row, col) using Thrust ===
+        // Use stable_sort to match CPU std::ranges::stable_sort and ensure deterministic ordering
         LOG_INFO(logger, "  Sorting triplets on GPU");
-        thrust::sort(d_triplets.begin(), d_triplets.end(), TripletComparator());
+        thrust::stable_sort(d_triplets.begin(), d_triplets.end(), TripletComparator());
 
         // === Step 7: Convert COO to CSR format ===
+        // Note: Like CPU implementation, duplicate (row,col) entries are NOT merged
         // Copy sorted triplets back to host for CSR construction
         thrust::host_vector<DeviceTriplet> h_triplets = d_triplets;
 

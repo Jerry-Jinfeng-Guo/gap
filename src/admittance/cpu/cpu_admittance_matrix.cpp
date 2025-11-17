@@ -146,8 +146,9 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
 
         last_stats_.triplets_used = triplets.size();
 
-        // === OPTIMIZATION: Single sort, then direct CSR construction ===
-        std::ranges::sort(triplets, [](const Triplet& a, const Triplet& b) {
+        // === OPTIMIZATION: Stable sort ensures deterministic ordering for duplicate (row,col)
+        // entries === (needed when multiple branches connect the same bus pair)
+        std::ranges::stable_sort(triplets, [](const Triplet& a, const Triplet& b) {
             if (a.row != b.row) return a.row < b.row;
             return a.col < b.col;
         });

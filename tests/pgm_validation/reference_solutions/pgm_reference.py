@@ -324,14 +324,15 @@ class PGMReferenceSolver:
             p = node_result["p"][i] if "p" in node_result.dtype.names else 0.0
             q = node_result["q"][i] if "q" in node_result.dtype.names else 0.0
 
+            angle_rad = node_result["u_angle"][i]
+            angle_deg = np.degrees(angle_rad)
+
             results.append(
                 {
                     "id": int(node_result["id"][i]),
                     "energized": bool(node_result["energized"][i]),
                     "u_pu": float(node_result["u_pu"][i]),
-                    "u_angle": float(
-                        np.degrees(node_result["u_angle"][i])
-                    ),  # Convert to degrees
+                    "u_angle": float(angle_deg),  # Convert to degrees
                     "u": float(node_result["u"][i]),
                     "p": float(p),
                     "q": float(q),

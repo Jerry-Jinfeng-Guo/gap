@@ -213,8 +213,10 @@ class ValidationRunner:
             v_error = abs(gap_bus["u_pu"] - pgm_bus["u_pu"])
             voltage_errors.append(v_error)
 
-            # Angle error (convert PGM from radians to degrees)
-            pgm_angle_deg = np.degrees(pgm_bus["u_angle"])
+            # Angle error (PGM output is already in degrees)
+            pgm_angle_deg = pgm_bus[
+                "u_angle"
+            ]  # Already in degrees from reference solution
             angle_error = abs(gap_bus["u_angle_deg"] - pgm_angle_deg)
             angle_errors.append(angle_error)
 

@@ -148,10 +148,10 @@
   "meta": {
     "solver": "power_grid_model",
     "calculation_method": "newton_raphson",
-    "calculation_time_s": 0.0001380443572998047,
+    "calculation_time_s": 0.0001270771026611328,
     "symmetric": true,
     "converged": true,
     "base_power_va": 1.0,
-    "timestamp": 1762872565.1204767
+    "timestamp": 1763372417.8359067
   }
 }

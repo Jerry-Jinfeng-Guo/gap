@@ -114,6 +114,104 @@ __global__ void accumulate_shunt_appliances_kernel(const gap::ApplianceData* app
     }
 }
 
+// Device helper function: Find CSR element index for (row, col)
+__device__ int find_csr_element(const int* row_ptr, const int* col_idx, int row, int col) {
+    int start = row_ptr[row];
+    int end = row_ptr[row + 1];
+
+    for (int idx = start; idx < end; ++idx) {
+        if (col_idx[idx] == col) {
+            return idx;
+        }
+    }
+    return -1;  // Element not found
+}
+
+// CUDA kernel: Update admittance matrix elements in parallel
+__global__ void update_admittance_matrix_kernel(const gap::BranchData* branch_changes,
+                                                int num_changes, const int* row_ptr,
+                                                const int* col_idx, cuDoubleComplex* values,
+                                                int num_rows) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_changes) return;
+
+    const gap::BranchData& branch = branch_changes[idx];
+    int from_bus = branch.from_bus;
+    int to_bus = branch.to_bus;
+
+    // Debug: Print first thread info
+    if (idx == 0) {
+        printf("GPU Update Kernel: Processing %d changes, from_bus=%d, to_bus=%d, status=%d\n",
+               num_changes, from_bus, to_bus, (int)branch.status);
+    }
+
+    // Validate bus indices
+    if (from_bus < 0 || from_bus >= num_rows || to_bus < 0 || to_bus >= num_rows) {
+        return;
+    }
+
+    // Calculate branch admittance change
+    double z_magnitude_sq = branch.r1 * branch.r1 + branch.x1 * branch.x1;
+    cuDoubleComplex series_admittance_change = make_cuDoubleComplex(0.0, 0.0);
+
+    if (z_magnitude_sq > 1e-12) {
+        series_admittance_change =
+            make_cuDoubleComplex(branch.r1 / z_magnitude_sq, -branch.x1 / z_magnitude_sq);
+    }
+
+    cuDoubleComplex total_admittance_change =
+        cuCadd(series_admittance_change, make_cuDoubleComplex(branch.g1, branch.b1));
+
+    // Handle branch status (out of service = subtract admittance)
+    if (!branch.status) {
+        total_admittance_change =
+            make_cuDoubleComplex(-total_admittance_change.x, -total_admittance_change.y);
+        series_admittance_change =
+            make_cuDoubleComplex(-series_admittance_change.x, -series_admittance_change.y);
+    }
+
+    cuDoubleComplex shunt_change = make_cuDoubleComplex(0.0, branch.b1 / 2.0);
+    if (!branch.status) {
+        shunt_change = make_cuDoubleComplex(-shunt_change.x, -shunt_change.y);
+    }
+
+    cuDoubleComplex diagonal_change = cuCadd(total_admittance_change, shunt_change);
+
+    // Update diagonal element (from_bus, from_bus)
+    int diag_from_idx = find_csr_element(row_ptr, col_idx, from_bus, from_bus);
+    if (diag_from_idx >= 0) {
+        atomicAdd(&values[diag_from_idx].x, diagonal_change.x);
+        atomicAdd(&values[diag_from_idx].y, diagonal_change.y);
+        if (idx < 5) {  // Debug first 5 threads
+            printf("  Thread %d: Updated diag[%d,%d] at idx=%d with (%f,%f)\n", idx, from_bus,
+                   from_bus, diag_from_idx, diagonal_change.x, diagonal_change.y);
+        }
+    } else if (idx < 5) {
+        printf("  Thread %d: NOT FOUND diag[%d,%d]\n", idx, from_bus, from_bus);
+    }
+
+    // Update diagonal element (to_bus, to_bus)
+    int diag_to_idx = find_csr_element(row_ptr, col_idx, to_bus, to_bus);
+    if (diag_to_idx >= 0) {
+        atomicAdd(&values[diag_to_idx].x, diagonal_change.x);
+        atomicAdd(&values[diag_to_idx].y, diagonal_change.y);
+    }
+
+    // Update off-diagonal element (from_bus, to_bus)
+    int off_diag_ft_idx = find_csr_element(row_ptr, col_idx, from_bus, to_bus);
+    if (off_diag_ft_idx >= 0) {
+        atomicAdd(&values[off_diag_ft_idx].x, -series_admittance_change.x);
+        atomicAdd(&values[off_diag_ft_idx].y, -series_admittance_change.y);
+    }
+
+    // Update off-diagonal element (to_bus, from_bus)
+    int off_diag_tf_idx = find_csr_element(row_ptr, col_idx, to_bus, from_bus);
+    if (off_diag_tf_idx >= 0) {
+        atomicAdd(&values[off_diag_tf_idx].x, -series_admittance_change.x);
+        atomicAdd(&values[off_diag_tf_idx].y, -series_admittance_change.y);
+    }
+}
+
 namespace gap::admittance {
 
 class GPUAdmittanceMatrix : public IAdmittanceMatrix {
@@ -412,76 +510,69 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
 
             LOG_INFO(logger, "  Matrix update completed on CPU");
         } else {
-            // TODO: For large batch updates (>100 branches), implement GPU kernel
-            // This would use parallel reduction and atomic updates on device
-            LOG_INFO(logger,
-                     "  Large batch update detected - falling back to CPU (GPU kernel TODO)");
+            // GPU path: Use parallel kernel for large batch updates
+            LOG_INFO(logger, "  Using GPU path for large update (", branch_changes.size(),
+                     "changes)");
 
-            // For now, fall back to CPU implementation
-            for (auto const& branch_change : branch_changes) {
-                int from_bus = branch_change.from_bus;
-                int to_bus = branch_change.to_bus;
+            // Transfer matrix CSR structure to device
+            thrust::device_vector<int> d_row_ptr(updated_matrix->row_ptr.begin(),
+                                                 updated_matrix->row_ptr.end());
+            thrust::device_vector<int> d_col_idx(updated_matrix->col_idx.begin(),
+                                                 updated_matrix->col_idx.end());
 
-                if (from_bus < 0 || from_bus >= updated_matrix->num_rows || to_bus < 0 ||
-                    to_bus >= updated_matrix->num_rows) {
-                    continue;
-                }
-
-                double z_magnitude_sq =
-                    branch_change.r1 * branch_change.r1 + branch_change.x1 * branch_change.x1;
-                Complex series_admittance_change(0.0, 0.0);
-                if (z_magnitude_sq > 1e-12) {
-                    series_admittance_change = Complex(branch_change.r1 / z_magnitude_sq,
-                                                       -branch_change.x1 / z_magnitude_sq);
-                }
-
-                Complex total_admittance_change =
-                    series_admittance_change + Complex(branch_change.g1, branch_change.b1);
-                if (!branch_change.status) {
-                    total_admittance_change = -total_admittance_change;
-                    series_admittance_change = -series_admittance_change;
-                }
-
-                Complex shunt_change(0.0, branch_change.b1 / 2.0);
-                if (!branch_change.status) {
-                    shunt_change = -shunt_change;
-                }
-
-                // CSR updates
-                for (int idx = updated_matrix->row_ptr[from_bus];
-                     idx < updated_matrix->row_ptr[from_bus + 1]; ++idx) {
-                    if (updated_matrix->col_idx[idx] == from_bus) {
-                        updated_matrix->values[idx] += total_admittance_change + shunt_change;
-                        break;
-                    }
-                }
-
-                for (int idx = updated_matrix->row_ptr[to_bus];
-                     idx < updated_matrix->row_ptr[to_bus + 1]; ++idx) {
-                    if (updated_matrix->col_idx[idx] == to_bus) {
-                        updated_matrix->values[idx] += total_admittance_change + shunt_change;
-                        break;
-                    }
-                }
-
-                for (int idx = updated_matrix->row_ptr[from_bus];
-                     idx < updated_matrix->row_ptr[from_bus + 1]; ++idx) {
-                    if (updated_matrix->col_idx[idx] == to_bus) {
-                        updated_matrix->values[idx] -= series_admittance_change;
-                        break;
-                    }
-                }
-
-                for (int idx = updated_matrix->row_ptr[to_bus];
-                     idx < updated_matrix->row_ptr[to_bus + 1]; ++idx) {
-                    if (updated_matrix->col_idx[idx] == from_bus) {
-                        updated_matrix->values[idx] -= series_admittance_change;
-                        break;
-                    }
-                }
+            // Convert Complex values to cuDoubleComplex
+            std::vector<cuDoubleComplex> h_values(updated_matrix->values.size());
+            for (size_t i = 0; i < updated_matrix->values.size(); ++i) {
+                h_values[i] = make_cuDoubleComplex(updated_matrix->values[i].real(),
+                                                   updated_matrix->values[i].imag());
             }
 
-            LOG_INFO(logger, "  Matrix update completed");
+            LOG_INFO(logger, "  Initial h_values[78] = (", cuCreal(h_values[78]), ",",
+                     cuCimag(h_values[78]), ")");
+
+            thrust::device_vector<cuDoubleComplex> d_values(h_values.begin(), h_values.end());
+
+            // Transfer branch changes to device
+            thrust::device_vector<BranchData> d_branch_changes(branch_changes.begin(),
+                                                               branch_changes.end());
+
+            // Launch kernel
+            int threads_per_block = 256;
+            int num_blocks = (branch_changes.size() + threads_per_block - 1) / threads_per_block;
+
+            update_admittance_matrix_kernel<<<num_blocks, threads_per_block>>>(
+                thrust::raw_pointer_cast(d_branch_changes.data()),
+                static_cast<int>(branch_changes.size()), thrust::raw_pointer_cast(d_row_ptr.data()),
+                thrust::raw_pointer_cast(d_col_idx.data()),
+                thrust::raw_pointer_cast(d_values.data()), updated_matrix->num_rows);
+
+            cudaError_t cuda_status = cudaGetLastError();
+            if (cuda_status != cudaSuccess) {
+                throw std::runtime_error(std::string("CUDA update kernel failed: ") +
+                                         cudaGetErrorString(cuda_status));
+            }
+
+            cudaDeviceSynchronize();
+
+            // Copy updated values back to host
+            thrust::host_vector<cuDoubleComplex> h_values_updated = d_values;
+
+            LOG_INFO(logger, "  Device values size:", d_values.size());
+            LOG_INFO(logger, "  Host values size:", h_values_updated.size());
+            LOG_INFO(logger, "  Matrix values size:", updated_matrix->values.size());
+
+            // Sample some values for debugging
+            if (h_values_updated.size() > 78) {
+                LOG_INFO(logger, "  h_values_updated[78] = (", cuCreal(h_values_updated[78]), ",",
+                         cuCimag(h_values_updated[78]), ")");
+            }
+
+            for (size_t i = 0; i < updated_matrix->values.size(); ++i) {
+                updated_matrix->values[i] =
+                    Complex(cuCreal(h_values_updated[i]), cuCimag(h_values_updated[i]));
+            }
+
+            LOG_INFO(logger, "  Matrix update completed on GPU");
         }
 
         return updated_matrix;

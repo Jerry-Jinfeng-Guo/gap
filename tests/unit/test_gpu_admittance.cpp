@@ -280,3 +280,171 @@ void test_gpu_powerflow_functionality() {
     auto result = pf_solver->solve_power_flow(network, matrix, config);
     ASSERT_EQ(3, result.bus_voltages.size());
 }
+
+void test_gpu_admittance_update_small_batch() {
+    if (!BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+        std::cout << "GPU not available, skipping test" << std::endl;
+        return;
+    }
+
+    std::cout << "\n=== Testing GPU admittance matrix update (small batch <100) ===" << std::endl;
+
+    // Create a 10-bus network with 15 branches
+    NetworkData network;
+    network.num_buses = 10;
+    network.num_branches = 15;
+
+    // Create buses
+    for (int i = 0; i < 10; ++i) {
+        BusData bus = {.id = i,
+                       .u_rated = 230000.0,
+                       .bus_type = (i == 0) ? BusType::SLACK : BusType::PQ,
+                       .energized = 1,
+                       .u = 230000.0,
+                       .u_pu = 1.0,
+                       .u_angle = 0.0};
+        network.buses.push_back(bus);
+    }
+
+    // Create branches (mesh topology for realistic test)
+    std::vector<std::pair<int, int>> branch_connections = {{0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5},
+                                                           {5, 6}, {6, 7}, {7, 8}, {8, 9}, {9, 0},
+                                                           {0, 5}, {1, 6}, {2, 7}, {3, 8}, {4, 9}};
+
+    for (size_t i = 0; i < branch_connections.size(); ++i) {
+        BranchData branch = {.id = static_cast<int>(i),
+                             .from_bus = branch_connections[i].first,
+                             .to_bus = branch_connections[i].second,
+                             .status = true,
+                             .r1 = 0.01 + 0.001 * i,
+                             .x1 = 0.1 + 0.01 * i,
+                             .g1 = 0.0,
+                             .b1 = 0.05};
+        network.branches.push_back(branch);
+    }
+
+    // Build initial matrix with both backends
+    auto cpu_backend = BackendFactory::create_admittance_backend(BackendType::CPU);
+    auto gpu_backend = BackendFactory::create_admittance_backend(BackendType::GPU_CUDA);
+
+    auto cpu_matrix = cpu_backend->build_admittance_matrix(network);
+    auto gpu_matrix = gpu_backend->build_admittance_matrix(network);
+
+    // Create 5 branch changes (small batch - should use CPU path)
+    std::vector<BranchData> changes;
+    for (int i = 0; i < 5; ++i) {
+        BranchData change = network.branches[i];
+        change.status = false;  // Take branches out of service
+        changes.push_back(change);
+    }
+
+    std::cout << "Applying " << changes.size() << " branch changes..." << std::endl;
+
+    // Update matrices
+    auto cpu_updated = cpu_backend->update_admittance_matrix(*cpu_matrix, changes);
+    auto gpu_updated = gpu_backend->update_admittance_matrix(*gpu_matrix, changes);
+
+    std::cout << "CPU updated matrix: " << cpu_updated->num_rows << "x" << cpu_updated->num_cols
+              << ", nnz=" << cpu_updated->nnz << std::endl;
+    std::cout << "GPU updated matrix: " << gpu_updated->num_rows << "x" << gpu_updated->num_cols
+              << ", nnz=" << gpu_updated->nnz << std::endl;
+
+    ASSERT_TRUE(matrices_equal(*cpu_updated, *gpu_updated));
+    std::cout << "✓ Small batch update: CPU and GPU results match!" << std::endl;
+}
+
+void test_gpu_admittance_update_large_batch() {
+    if (!BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+        std::cout << "GPU not available, skipping test" << std::endl;
+        return;
+    }
+
+    std::cout << "\n=== Testing GPU admittance matrix update (large batch >=100) ===" << std::endl;
+
+    // Create a large network: 100 buses with 200 branches
+    NetworkData network;
+    network.num_buses = 100;
+    network.num_branches = 200;
+
+    // Create buses
+    for (int i = 0; i < 100; ++i) {
+        BusData bus = {.id = i,
+                       .u_rated = 230000.0,
+                       .bus_type = (i == 0) ? BusType::SLACK : BusType::PQ,
+                       .energized = 1,
+                       .u = 230000.0,
+                       .u_pu = 1.0,
+                       .u_angle = 0.0};
+        network.buses.push_back(bus);
+    }
+
+    // Create branches (ring + random connections)
+    for (int i = 0; i < 100; ++i) {
+        BranchData branch = {.id = i,
+                             .from_bus = i,
+                             .to_bus = (i + 1) % 100,
+                             .status = true,
+                             .r1 = 0.01 + 0.0001 * i,
+                             .x1 = 0.1 + 0.001 * i,
+                             .g1 = 0.0,
+                             .b1 = 0.05};
+        network.branches.push_back(branch);
+    }
+
+    // Add cross-connections
+    for (int i = 100; i < 200; ++i) {
+        int from = (i * 7) % 100;
+        int to = (i * 13) % 100;
+        if (from == to) to = (to + 1) % 100;
+
+        BranchData branch = {.id = i,
+                             .from_bus = from,
+                             .to_bus = to,
+                             .status = true,
+                             .r1 = 0.02 + 0.0001 * i,
+                             .x1 = 0.15 + 0.001 * i,
+                             .g1 = 0.0,
+                             .b1 = 0.04};
+        network.branches.push_back(branch);
+    }
+
+    // Build initial matrix with both backends
+    auto cpu_backend = BackendFactory::create_admittance_backend(BackendType::CPU);
+    auto gpu_backend = BackendFactory::create_admittance_backend(BackendType::GPU_CUDA);
+
+    auto cpu_matrix = cpu_backend->build_admittance_matrix(network);
+    auto gpu_matrix = gpu_backend->build_admittance_matrix(network);
+
+    // Verify initial matrices match
+    std::cout << "Initial matrices match: "
+              << (matrices_equal(*cpu_matrix, *gpu_matrix) ? "YES" : "NO") << std::endl;
+    if (cpu_matrix->values.size() > 78) {
+        std::cout << "  Initial CPU[78] = " << cpu_matrix->values[78].real() << " + "
+                  << cpu_matrix->values[78].imag() << "j" << std::endl;
+        std::cout << "  Initial GPU[78] = " << gpu_matrix->values[78].real() << " + "
+                  << gpu_matrix->values[78].imag() << "j" << std::endl;
+    }
+
+    // Create 150 branch changes (large batch - should use GPU path)
+    // For incremental updates, we change branch status (typical contingency analysis use case)
+    std::vector<BranchData> changes;
+    for (int i = 0; i < 150; ++i) {
+        BranchData change = network.branches[i];
+        change.status = false;  // Take branches out of service
+        changes.push_back(change);
+    }
+
+    std::cout << "Applying " << changes.size() << " branch changes..." << std::endl;
+
+    // Update matrices
+    auto cpu_updated = cpu_backend->update_admittance_matrix(*cpu_matrix, changes);
+    auto gpu_updated = gpu_backend->update_admittance_matrix(*gpu_matrix, changes);
+
+    std::cout << "CPU updated matrix: " << cpu_updated->num_rows << "x" << cpu_updated->num_cols
+              << ", nnz=" << cpu_updated->nnz << std::endl;
+    std::cout << "GPU updated matrix: " << gpu_updated->num_rows << "x" << gpu_updated->num_cols
+              << ", nnz=" << gpu_updated->nnz << std::endl;
+
+    ASSERT_TRUE(matrices_equal(*cpu_updated, *gpu_updated));
+    std::cout << "✓ Large batch update: CPU and GPU results match!" << std::endl;
+}

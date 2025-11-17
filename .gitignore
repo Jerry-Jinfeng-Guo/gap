@@ -102,3 +102,6 @@ docs/latex/
 *.bak
 *.backup
 *~
+
+# Temporary directory
+temp/

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <map>
@@ -55,7 +56,24 @@ class CPULUSolver : public ILUSolver {
     static constexpr Float drop_tolerance_ = 1e-16;
     static constexpr Float growth_factor_limit_ = 1e12;
 
+    // Size threshold: use sparse for larger matrices, dense for small ones
+    static constexpr int sparse_threshold_ = 50;
+
+    // Factorization statistics for debugging
+    struct FactorizationStats {
+        double symbolic_time_ms = 0.0;
+        double numerical_time_ms = 0.0;
+        size_t input_nnz = 0;
+        size_t l_nnz = 0;
+        size_t u_nnz = 0;
+        double fill_ratio = 0.0;
+        bool used_sparse = false;
+    };
+    mutable FactorizationStats last_stats_;
+
   public:
+    // Get factorization statistics (for debugging/profiling)
+    FactorizationStats get_factorization_stats() const { return last_stats_; }
     /**
      * @brief Perform complete LU factorization in three phases
      */
@@ -79,6 +97,9 @@ class CPULUSolver : public ILUSolver {
         }
 
         matrix_size_ = matrix.num_rows;
+        last_stats_.input_nnz = matrix.nnz;
+
+        auto start_symbolic = std::chrono::high_resolution_clock::now();
 
         // Phase 1: Symbolic Analysis
         if (!perform_symbolic_analysis(matrix)) {
@@ -86,15 +107,34 @@ class CPULUSolver : public ILUSolver {
             return false;
         }
 
+        auto end_symbolic = std::chrono::high_resolution_clock::now();
+        last_stats_.symbolic_time_ms =
+            std::chrono::duration<double, std::milli>(end_symbolic - start_symbolic).count();
+
         // Phase 2: Numerical Factorization
+        auto start_numerical = std::chrono::high_resolution_clock::now();
+
         if (!perform_numerical_factorization(matrix)) {
             logger.logError("Numerical factorization failed");
             return false;
         }
 
+        auto end_numerical = std::chrono::high_resolution_clock::now();
+        last_stats_.numerical_time_ms =
+            std::chrono::duration<double, std::milli>(end_numerical - start_numerical).count();
+
+        last_stats_.l_nnz = symbolic_.l_nnz;
+        last_stats_.u_nnz = symbolic_.u_nnz;
+        last_stats_.fill_ratio =
+            static_cast<double>(symbolic_.l_nnz + symbolic_.u_nnz) / matrix.nnz;
+
         factorized_ = true;
         LOG_INFO(logger, "  Three-phase factorization completed successfully");
         LOG_INFO(logger, "  L nnz:", symbolic_.l_nnz, ", U nnz:", symbolic_.u_nnz);
+        LOG_DEBUG(logger, "  Symbolic time:", last_stats_.symbolic_time_ms, "ms");
+        LOG_DEBUG(logger, "  Numerical time:", last_stats_.numerical_time_ms, "ms");
+        LOG_DEBUG(logger, "  Fill ratio:", last_stats_.fill_ratio, "x");
+        LOG_DEBUG(logger, "  Method:", last_stats_.used_sparse ? "sparse" : "dense");
 
         return true;
     }
@@ -290,27 +330,210 @@ class CPULUSolver : public ILUSolver {
             return false;
         }
 
+        // Choose algorithm based on matrix size
+        if (matrix_size_ < sparse_threshold_) {
+            LOG_DEBUG(logger, "    Using dense factorization (small matrix)");
+            last_stats_.used_sparse = false;
+            return perform_dense_factorization(matrix);
+        } else {
+            LOG_DEBUG(logger, "    Using sparse factorization (large matrix)");
+            last_stats_.used_sparse = true;
+            return perform_sparse_factorization(matrix);
+        }
+    }
+
+  private:
+    /**
+     * @brief Sparse LU factorization using symbolic structure
+     */
+    bool perform_sparse_factorization(const SparseMatrix& matrix) {
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("CPULUSolver");
+
+        // Initialize permutation (identity for now)
+        numerical_.pivot_row.resize(matrix_size_);
+        numerical_.pivot_col.resize(matrix_size_);
+        std::iota(numerical_.pivot_row.begin(), numerical_.pivot_row.end(), 0);
+        std::iota(numerical_.pivot_col.begin(), numerical_.pivot_col.end(), 0);
+
+        // Copy input matrix to working structure
+        std::vector<std::map<int, Complex>> sparse_rows(matrix_size_);
+        for (int row = 0; row < matrix_size_; ++row) {
+            for (int idx = matrix.row_ptr[row]; idx < matrix.row_ptr[row + 1]; ++idx) {
+                int col = matrix.col_idx[idx];
+                sparse_rows[row][col] = matrix.values[idx];
+            }
+        }
+
+        // Perform Doolittle LU factorization with partial pivoting: PA = LU
+        int num_pivots = 0;
+        for (int k = 0; k < matrix_size_; ++k) {
+            // Find pivot: largest element in column k, rows k to n-1
+            int pivot_row = k;
+            Float max_pivot = 0.0;
+
+            for (int i = k; i < matrix_size_; ++i) {
+                auto it = sparse_rows[i].find(k);
+                if (it != sparse_rows[i].end()) {
+                    Float abs_val = std::abs(it->second);
+                    if (abs_val > max_pivot) {
+                        max_pivot = abs_val;
+                        pivot_row = i;
+                    }
+                }
+            }
+
+            // Check if pivot is acceptable
+            if (max_pivot < pivot_tolerance_) {
+                // No acceptable pivot found - try dense fallback
+                LOG_DEBUG(logger, "No acceptable pivot at column", k, "(max =", max_pivot,
+                          ") - falling back to dense");
+                return perform_dense_factorization(matrix);
+            }
+
+            // Swap rows k and pivot_row if needed
+            if (pivot_row != k) {
+                num_pivots++;
+                std::swap(sparse_rows[k], sparse_rows[pivot_row]);
+                // Update permutation: track which original row is now at position k
+                std::swap(numerical_.pivot_row[k], numerical_.pivot_row[pivot_row]);
+            }
+
+            Complex pivot = sparse_rows[k][k];  // After swap, pivot is at [k][k]
+
+            // Pivoting performed (logging disabled for performance)
+
+            // For each row i > k that has non-zero in column k
+            for (int i = k + 1; i < matrix_size_; ++i) {
+                auto it_ik = sparse_rows[i].find(k);
+                if (it_ik == sparse_rows[i].end()) {
+                    continue;  // A(i,k) is already zero
+                }
+
+                Complex a_ik = it_ik->second;
+                if (std::abs(a_ik) < drop_tolerance_) {
+                    sparse_rows[i].erase(it_ik);
+                    continue;
+                }
+
+                // Compute multiplier L(i,k) = A(i,k) / U(k,k)
+                Complex multiplier = a_ik / pivot;
+
+                // Store L(i,k) - overwrite A(i,k) with the multiplier
+                it_ik->second = multiplier;
+
+                // Update row i: A(i,j) -= L(i,k) * U(k,j) for all j > k
+                // We need to be careful not to iterate and modify sparse_rows[k] simultaneously
+                std::vector<std::pair<int, Complex>> row_k_upper;
+                for (auto const& [j, value] : sparse_rows[k]) {
+                    if (j > k) {  // Only upper triangular part (U)
+                        row_k_upper.push_back({j, value});
+                    }
+                }
+
+                // Now apply updates
+                for (auto const& [j, u_kj] : row_k_upper) {
+                    Complex update = multiplier * u_kj;
+
+                    auto it_ij = sparse_rows[i].find(j);
+                    if (it_ij != sparse_rows[i].end()) {
+                        // Element exists, update it
+                        it_ij->second -= update;
+                        if (std::abs(it_ij->second) < drop_tolerance_) {
+                            sparse_rows[i].erase(it_ij);
+                        }
+                    } else if (std::abs(update) > drop_tolerance_) {
+                        // Fill-in: create new non-zero
+                        sparse_rows[i][j] = -update;
+                    }
+                }
+            }
+        }
+
+        // Extract L and U factors from sparse_rows
+        symbolic_.l_row_ptr.assign(matrix_size_ + 1, 0);
+        symbolic_.u_row_ptr.assign(matrix_size_ + 1, 0);
+        symbolic_.l_col_idx.clear();
+        symbolic_.u_col_idx.clear();
+        numerical_.l_values.clear();
+        numerical_.u_values.clear();
+
+        // Build L (lower triangular with unit diagonal)
+        for (int row = 0; row < matrix_size_; ++row) {
+            symbolic_.l_row_ptr[row] = numerical_.l_values.size();
+
+            // Collect and sort lower triangular elements
+            std::vector<std::pair<int, Complex>> lower_elements;
+            for (auto const& [col, value] : sparse_rows[row]) {
+                if (col < row) {
+                    lower_elements.push_back({col, value});
+                }
+            }
+            std::sort(lower_elements.begin(), lower_elements.end(),
+                      [](auto const& a, auto const& b) { return a.first < b.first; });
+
+            // Add in sorted order
+            for (auto const& [col, value] : lower_elements) {
+                if (std::abs(value) > drop_tolerance_) {
+                    symbolic_.l_col_idx.push_back(col);
+                    numerical_.l_values.push_back(value);
+                }
+            }
+
+            // Add unit diagonal
+            symbolic_.l_col_idx.push_back(row);
+            numerical_.l_values.push_back(Complex(1.0, 0.0));
+        }
+        symbolic_.l_row_ptr[matrix_size_] = numerical_.l_values.size();
+        symbolic_.l_nnz = numerical_.l_values.size();
+
+        // Build U (upper triangular including diagonal)
+        for (int row = 0; row < matrix_size_; ++row) {
+            symbolic_.u_row_ptr[row] = numerical_.u_values.size();
+
+            // Collect and sort upper triangular elements
+            std::vector<std::pair<int, Complex>> upper_elements;
+            for (auto const& [col, value] : sparse_rows[row]) {
+                if (col >= row) {
+                    upper_elements.push_back({col, value});
+                }
+            }
+            std::sort(upper_elements.begin(), upper_elements.end(),
+                      [](auto const& a, auto const& b) { return a.first < b.first; });
+
+            // Add in sorted order
+            for (auto const& [col, value] : upper_elements) {
+                if (std::abs(value) > drop_tolerance_) {
+                    symbolic_.u_col_idx.push_back(col);
+                    numerical_.u_values.push_back(value);
+                }
+            }
+        }
+        symbolic_.u_row_ptr[matrix_size_] = numerical_.u_values.size();
+        symbolic_.u_nnz = numerical_.u_values.size();
+
+        numerical_.valid = true;
+
+        LOG_DEBUG(logger, "    Sparse factorization complete:", num_pivots,
+                  "pivots, L nnz:", symbolic_.l_nnz, ", U nnz:", symbolic_.u_nnz);
+
+        return true;
+    }
+
+    /**
+     * @brief Dense LU factorization for small matrices (backward compatibility)
+     */
+    bool perform_dense_factorization(const SparseMatrix& matrix) {
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("CPULUSolver");
+
         // Initialize permutation matrices (start with identity)
         numerical_.pivot_row.resize(matrix_size_);
         numerical_.pivot_col.resize(matrix_size_);
         std::iota(numerical_.pivot_row.begin(), numerical_.pivot_row.end(), 0);
         std::iota(numerical_.pivot_col.begin(), numerical_.pivot_col.end(), 0);
 
-        // Initialize factor storage with zeros
-        numerical_.l_values.assign(symbolic_.l_nnz, Complex(0.0, 0.0));
-        numerical_.u_values.assign(symbolic_.u_nnz, Complex(0.0, 0.0));
-
-        // SIMPLIFIED APPROACH: Use controlled dense factorization for accuracy
-        // This ensures numerical accuracy while being mindful of memory usage
-
-        // Only use dense approach for matrices that fit reasonably in memory
-        if (matrix_size_ > 1000) {
-            logger.logError("Matrix too large for current implementation (size=" +
-                            std::to_string(matrix_size_) + ")");
-            return false;
-        }
-
-        // Create a working dense matrix - this is temporary for accuracy
+        // Create a working dense matrix
         std::vector<std::vector<Complex>> dense_work(
             matrix_size_, std::vector<Complex>(matrix_size_, Complex(0.0, 0.0)));
 
@@ -322,7 +545,7 @@ class CPULUSolver : public ILUSolver {
             }
         }
 
-        // Perform LU factorization with scaled partial pivoting for maximum accuracy
+        // Perform LU factorization with scaled partial pivoting
         std::vector<Float> scale(matrix_size_);
 
         // Compute scaling factors (largest element in each row)
@@ -378,10 +601,7 @@ class CPULUSolver : public ILUSolver {
             }
         }
 
-        // Rebuild symbolic structure based on actual factorization results
-        // This ensures perfect alignment between symbolic and numerical phases
-
-        // Clear and rebuild L and U structures
+        // Extract L and U from dense_work
         symbolic_.l_row_ptr.assign(matrix_size_ + 1, 0);
         symbolic_.u_row_ptr.assign(matrix_size_ + 1, 0);
         symbolic_.l_col_idx.clear();
@@ -422,25 +642,10 @@ class CPULUSolver : public ILUSolver {
         symbolic_.u_nnz = numerical_.u_values.size();
 
         numerical_.valid = true;
-
-        // Calculate actual non-zeros after dropping small elements
-        int actual_l_nnz = 0, actual_u_nnz = 0;
-        for (auto const& val : numerical_.l_values) {
-            if (std::abs(val) > drop_tolerance_) actual_l_nnz++;
-        }
-        for (auto const& val : numerical_.u_values) {
-            if (std::abs(val) > drop_tolerance_) actual_u_nnz++;
-        }
-
-        LOG_DEBUG(logger, "    Pivot tolerance:", pivot_tolerance_);
-        LOG_DEBUG(logger, "    Drop tolerance:", drop_tolerance_);
-        LOG_DEBUG(logger, "    Growth factor limit:", growth_factor_limit_);
-        LOG_DEBUG(logger, "    Actual L nnz:", actual_l_nnz, "/", symbolic_.l_nnz);
-        LOG_DEBUG(logger, "    Actual U nnz:", actual_u_nnz, "/", symbolic_.u_nnz);
-
         return true;
     }
 
+  public:
     /**
      * @brief Apply row permutation: result = P * vector
      */

@@ -167,7 +167,8 @@ if __name__ == "__main__":
         (3, 2),  # radial_3feeder_2nodepf
         (3, 4),  # radial_3feeder_4nodepf
         (3, 8),  # radial_3feeder_8nodepf
-        (10, 10),  # radial_10feeder_10nodepf (extreme case: 101 buses)
+        (10, 10),  # radial_10feeder_10nodepf (101 buses)
+        (25, 50),  # radial_25feeder_50nodepf (1251 buses - extreme large case)
     ]
 
     print(f"📋 Generating {len(test_configs)} test cases:")

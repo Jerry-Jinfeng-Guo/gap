@@ -37,6 +37,15 @@ class CPULUSolver : public ILUSolver {
         bool valid = false;          // Symbolic analysis completed
     } symbolic_;
 
+    // Symbolic caching for pattern reuse (Phase 1 optimization)
+    struct SymbolicCache {
+        std::vector<int> pattern_row_ptr;  // Cached sparsity pattern (row pointers)
+        std::vector<int> pattern_col_idx;  // Cached sparsity pattern (column indices)
+        int cached_size = 0;               // Size of cached pattern
+        int cached_nnz = 0;                // NNZ of cached pattern
+        bool valid = false;                // Cache is valid
+    } symbolic_cache_;
+
     // Numerical factorization results
     struct NumericalFactors {
         std::vector<Complex> l_values;  // L matrix values (lower triangular)
@@ -68,6 +77,7 @@ class CPULUSolver : public ILUSolver {
         size_t u_nnz = 0;
         double fill_ratio = 0.0;
         bool used_sparse = false;
+        bool used_cached_symbolic = false;  // Phase 1: Whether symbolic structure was reused
     };
     mutable FactorizationStats last_stats_;
 
@@ -98,6 +108,7 @@ class CPULUSolver : public ILUSolver {
 
         matrix_size_ = matrix.num_rows;
         last_stats_.input_nnz = matrix.nnz;
+        last_stats_.used_cached_symbolic = pattern_matches_cache(matrix);
 
         auto start_symbolic = std::chrono::high_resolution_clock::now();
 
@@ -131,9 +142,9 @@ class CPULUSolver : public ILUSolver {
         factorized_ = true;
         LOG_INFO(logger, "  Three-phase factorization completed successfully");
         LOG_INFO(logger, "  L nnz:", symbolic_.l_nnz, ", U nnz:", symbolic_.u_nnz);
-        LOG_DEBUG(logger, "  Symbolic time:", last_stats_.symbolic_time_ms, "ms");
-        LOG_DEBUG(logger, "  Numerical time:", last_stats_.numerical_time_ms, "ms");
-        LOG_DEBUG(logger, "  Fill ratio:", last_stats_.fill_ratio, "x");
+        LOG_DEBUG(logger, "  Symbolic:", last_stats_.symbolic_time_ms, "ms",
+                  last_stats_.used_cached_symbolic ? "(cached)" : "(computed)");
+        LOG_DEBUG(logger, "  Numerical:", last_stats_.numerical_time_ms, "ms");
         LOG_DEBUG(logger, "  Method:", last_stats_.used_sparse ? "sparse" : "dense");
 
         return true;
@@ -191,13 +202,58 @@ class CPULUSolver : public ILUSolver {
 
   private:
     /**
+     * @brief Check if matrix sparsity pattern matches cached pattern
+     */
+    bool pattern_matches_cache(const SparseMatrix& matrix) const {
+        if (!symbolic_cache_.valid) {
+            return false;
+        }
+        if (matrix.num_rows != symbolic_cache_.cached_size ||
+            matrix.nnz != symbolic_cache_.cached_nnz) {
+            return false;
+        }
+        if (matrix.row_ptr.size() != symbolic_cache_.pattern_row_ptr.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < matrix.row_ptr.size(); ++i) {
+            if (matrix.row_ptr[i] != symbolic_cache_.pattern_row_ptr[i]) {
+                return false;
+            }
+        }
+        if (matrix.col_idx.size() != symbolic_cache_.pattern_col_idx.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < matrix.col_idx.size(); ++i) {
+            if (matrix.col_idx[i] != symbolic_cache_.pattern_col_idx[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void cache_pattern(const SparseMatrix& matrix) {
+        symbolic_cache_.pattern_row_ptr = matrix.row_ptr;
+        symbolic_cache_.pattern_col_idx = matrix.col_idx;
+        symbolic_cache_.cached_size = matrix.num_rows;
+        symbolic_cache_.cached_nnz = matrix.nnz;
+        symbolic_cache_.valid = true;
+    }
+
+    /**
      * @brief Phase 1: Symbolic Analysis
      * Analyze sparsity pattern and predict fill-in locations
      */
     bool perform_symbolic_analysis(const SparseMatrix& matrix) {
         auto& logger = gap::logging::global_logger;
         logger.setComponent("CPULUSolver");
-        LOG_INFO(logger, "  Phase 1: Symbolic analysis...");
+
+        // Phase 1: Check cache first
+        if (pattern_matches_cache(matrix)) {
+            LOG_INFO(logger, "  Phase 1: Reusing cached symbolic structure");
+            return true;
+        }
+
+        LOG_INFO(logger, "  Phase 1: Computing symbolic analysis...");
 
         // Validate CSR format
         if (matrix.row_ptr.size() != static_cast<size_t>(matrix_size_ + 1)) {
@@ -308,6 +364,7 @@ class CPULUSolver : public ILUSolver {
         symbolic_.u_row_ptr[matrix_size_] = symbolic_.u_nnz;
 
         symbolic_.valid = true;
+        cache_pattern(matrix);  // Phase 1: Cache for reuse
 
         Float fill_ratio = static_cast<Float>(symbolic_.l_nnz + symbolic_.u_nnz) / matrix.nnz;
         LOG_DEBUG(logger, "    L nnz:", symbolic_.l_nnz, ", U nnz:", symbolic_.u_nnz);

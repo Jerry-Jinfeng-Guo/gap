@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <numeric>
@@ -13,6 +14,16 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
   private:
     std::shared_ptr<ILUSolver> lu_solver_;
     gap::logging::Logger& logger = gap::logging::global_logger;
+
+    // Profiling data
+    struct ProfilingData {
+        double total_mismatch_time = 0.0;
+        double total_jacobian_time = 0.0;
+        double total_factorize_time = 0.0;
+        double total_solve_time = 0.0;
+        double total_update_time = 0.0;
+        int iteration_count = 0;
+    };
 
   public:
     PowerFlowResult solve_power_flow(NetworkData const& network_data,
@@ -72,15 +83,24 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             }
         }
 
+        // Initialize profiling
+        ProfilingData profiling;
+        auto total_start = std::chrono::high_resolution_clock::now();
+
         // Newton-Raphson iterations
         for (int iter = 0; iter < config.max_iterations; ++iter) {
             if (config.verbose) {
                 LOG_DEBUG(logger, "  Iteration", (iter + 1));
             }
+            profiling.iteration_count = iter + 1;
 
             // Calculate mismatches (uses per-unit Y-bus and base_power)
+            auto t1 = std::chrono::high_resolution_clock::now();
             auto mismatches = calculate_mismatches_impl(network_data, result.bus_voltages, y_pu,
                                                         config.base_power);
+            auto t2 = std::chrono::high_resolution_clock::now();
+            profiling.total_mismatch_time +=
+                std::chrono::duration<double, std::milli>(t2 - t1).count();
 
             // Check convergence
             Float max_mismatch = 0.0;
@@ -100,17 +120,53 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             }
 
             // Build Jacobian matrix and solve Newton's correction equations
-            auto corrections =
-                solve_newton_correction(network_data, mismatches, result.bus_voltages, y_pu);
+            auto corrections = solve_newton_correction(network_data, mismatches,
+                                                       result.bus_voltages, y_pu, profiling);
 
             // Update voltage estimates with Newton's method: V = V + ΔV
+            auto t_update_start = std::chrono::high_resolution_clock::now();
             update_voltage_estimates(network_data, result.bus_voltages, corrections);
+            auto t_update_end = std::chrono::high_resolution_clock::now();
+            profiling.total_update_time +=
+                std::chrono::duration<double, std::milli>(t_update_end - t_update_start).count();
         }
 
         if (!result.converged) {
             LOG_WARN(logger, "  Failed to converge after", config.max_iterations, "iterations");
             result.iterations = config.max_iterations;
         }
+
+        auto total_end = std::chrono::high_resolution_clock::now();
+        double total_time =
+            std::chrono::duration<double, std::milli>(total_end - total_start).count();
+
+        // Print profiling summary
+        LOG_INFO(logger, "\n=== PERFORMANCE PROFILING ===");
+        LOG_INFO(logger, "Total iterations:", profiling.iteration_count);
+        LOG_INFO(logger, "Total time:", total_time, "ms");
+        LOG_INFO(logger, "\nTime breakdown (total / avg per iteration):");
+        LOG_INFO(logger, "  Mismatch calculation:", profiling.total_mismatch_time, "ms /",
+                 profiling.total_mismatch_time / profiling.iteration_count, "ms", "(",
+                 100.0 * profiling.total_mismatch_time / total_time, "%)");
+        LOG_INFO(logger, "  Jacobian construction:", profiling.total_jacobian_time, "ms /",
+                 profiling.total_jacobian_time / profiling.iteration_count, "ms", "(",
+                 100.0 * profiling.total_jacobian_time / total_time, "%)");
+        LOG_INFO(logger, "  LU factorization:", profiling.total_factorize_time, "ms /",
+                 profiling.total_factorize_time / profiling.iteration_count, "ms", "(",
+                 100.0 * profiling.total_factorize_time / total_time, "%)");
+        LOG_INFO(logger, "  Linear solve:", profiling.total_solve_time, "ms /",
+                 profiling.total_solve_time / profiling.iteration_count, "ms", "(",
+                 100.0 * profiling.total_solve_time / total_time, "%)");
+        LOG_INFO(logger, "  Voltage update:", profiling.total_update_time, "ms /",
+                 profiling.total_update_time / profiling.iteration_count, "ms", "(",
+                 100.0 * profiling.total_update_time / total_time, "%)");
+
+        double accounted = profiling.total_mismatch_time + profiling.total_jacobian_time +
+                           profiling.total_factorize_time + profiling.total_solve_time +
+                           profiling.total_update_time;
+        LOG_INFO(logger, "  Other (overhead):", total_time - accounted, "ms", "(",
+                 100.0 * (total_time - accounted) / total_time, "%)");
+        LOG_INFO(logger, "============================\n");
 
         // Debug: Log final voltage magnitudes
         if (config.verbose) {
@@ -289,11 +345,16 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     std::vector<Float> solve_newton_correction(NetworkData const& network_data,
                                                std::vector<Float> const& mismatches,
                                                ComplexVector const& voltages,
-                                               SparseMatrix const& Y_bus) const {
+                                               SparseMatrix const& Y_bus,
+                                               ProfilingData& profiling) const {
         LOG_TRACE(logger, "CPUNewtonRaphson: Building Jacobian and solving linear system");
 
         // Build the Jacobian matrix for power flow equations
+        auto t_jac_start = std::chrono::high_resolution_clock::now();
         auto jacobian = build_jacobian_matrix(network_data, voltages, Y_bus);
+        auto t_jac_end = std::chrono::high_resolution_clock::now();
+        profiling.total_jacobian_time +=
+            std::chrono::duration<double, std::milli>(t_jac_end - t_jac_start).count();
 
         if (!lu_solver_) {
             LOG_ERROR(logger, "LU solver not initialized");
@@ -309,13 +370,22 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
                                [](Float mismatch) { return Complex(-mismatch, 0.0); });
 
         // Factorize and solve
+        auto t_fact_start = std::chrono::high_resolution_clock::now();
         bool factorized = lu_solver_->factorize(jacobian_sparse);
+        auto t_fact_end = std::chrono::high_resolution_clock::now();
+        profiling.total_factorize_time +=
+            std::chrono::duration<double, std::milli>(t_fact_end - t_fact_start).count();
+
         if (!factorized) {
             LOG_ERROR(logger, "Failed to factorize Jacobian matrix");
             return std::vector<Float>(mismatches.size(), 0.0);
         }
 
+        auto t_solve_start = std::chrono::high_resolution_clock::now();
         ComplexVector solution_complex = lu_solver_->solve(rhs_complex);
+        auto t_solve_end = std::chrono::high_resolution_clock::now();
+        profiling.total_solve_time +=
+            std::chrono::duration<double, std::milli>(t_solve_end - t_solve_start).count();
 
         // Convert back to real solution
         std::vector<Float> solution(solution_complex.size());

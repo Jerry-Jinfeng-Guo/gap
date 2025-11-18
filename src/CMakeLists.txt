@@ -4,6 +4,14 @@ add_library(gap_core STATIC
     logging/logger.cpp
 )
 
+if(GAP_ENABLE_CUDA)
+    # Add GPU data structures when CUDA is enabled
+    target_sources(gap_core PRIVATE
+        core/gpu_data_structures.cu
+    )
+    set_source_files_properties(core/gpu_data_structures.cu PROPERTIES LANGUAGE CUDA)
+endif()
+
 target_include_directories(gap_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include
 )
@@ -17,6 +25,9 @@ set_target_properties(gap_core PROPERTIES
 if(GAP_ENABLE_CUDA)
     target_link_libraries(gap_core
         CUDA::cudart
+    )
+    set_target_properties(gap_core PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
     )
 endif()
 
@@ -182,6 +193,7 @@ target_link_libraries(gap_powerflow_cpu
 if(GAP_ENABLE_CUDA)
     add_library(gap_powerflow_gpu SHARED
         solver/powerflow/gpu/gpu_newton_raphson.cu
+        solver/powerflow/gpu/gpu_powerflow_kernels.cu
     )
 
     target_include_directories(gap_powerflow_gpu PUBLIC

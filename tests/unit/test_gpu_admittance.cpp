@@ -131,7 +131,9 @@ void test_gpu_vs_cpu_admittance_simple() {
 
     BranchData branch1 = {.id = 0,
                           .from_bus = 0,
+                          .from_status = 1,
                           .to_bus = 1,
+                          .to_status = 1,
                           .status = true,
                           .r1 = 0.01,
                           .x1 = 0.1,
@@ -139,7 +141,9 @@ void test_gpu_vs_cpu_admittance_simple() {
                           .b1 = 0.05};
     BranchData branch2 = {.id = 1,
                           .from_bus = 1,
+                          .from_status = 1,
                           .to_bus = 2,
+                          .to_status = 1,
                           .status = true,
                           .r1 = 0.02,
                           .x1 = 0.2,
@@ -269,15 +273,39 @@ void test_gpu_powerflow_functionality() {
                     .active_power = 80e6,
                     .reactive_power = 40e6};
     network.buses = {bus1, bus2, bus3};
+    network.num_branches = 2;
 
-    SparseMatrix matrix;
-    matrix.num_rows = 3;
-    matrix.num_cols = 3;
+    // Create branches
+    BranchData branch1 = {.id = 1,
+                          .from_bus = 1,
+                          .from_status = 1,
+                          .to_bus = 2,
+                          .to_status = 1,
+                          .status = true,
+                          .r1 = 0.01,
+                          .x1 = 0.1,
+                          .g1 = 0.0,
+                          .b1 = 0.05};
+    BranchData branch2 = {.id = 2,
+                          .from_bus = 2,
+                          .from_status = 1,
+                          .to_bus = 3,
+                          .to_status = 1,
+                          .status = true,
+                          .r1 = 0.015,
+                          .x1 = 0.12,
+                          .g1 = 0.0,
+                          .b1 = 0.04};
+    network.branches = {branch1, branch2};
+
+    // Build admittance matrix
+    auto admittance = BackendFactory::create_admittance_backend(BackendType::GPU_CUDA);
+    auto matrix = admittance->build_admittance_matrix(network);
 
     solver::PowerFlowConfig config;
     config.max_iterations = 5;
 
-    auto result = pf_solver->solve_power_flow(network, matrix, config);
+    auto result = pf_solver->solve_power_flow(network, *matrix, config);
     ASSERT_EQ(3, result.bus_voltages.size());
 }
 
@@ -314,7 +342,9 @@ void test_gpu_admittance_update_small_batch() {
     for (size_t i = 0; i < branch_connections.size(); ++i) {
         BranchData branch = {.id = static_cast<int>(i),
                              .from_bus = branch_connections[i].first,
+                             .from_status = 1,
                              .to_bus = branch_connections[i].second,
+                             .to_status = 1,
                              .status = true,
                              .r1 = 0.01 + 0.001 * i,
                              .x1 = 0.1 + 0.01 * i,
@@ -403,7 +433,9 @@ void test_gpu_admittance_update_large_batch() {
     for (int i = 0; i < 100; ++i) {
         BranchData branch = {.id = i,
                              .from_bus = i,
+                             .from_status = 1,
                              .to_bus = (i + 1) % 100,
+                             .to_status = 1,
                              .status = true,
                              .r1 = 0.01 + 0.0001 * i,
                              .x1 = 0.1 + 0.001 * i,
@@ -420,7 +452,9 @@ void test_gpu_admittance_update_large_batch() {
 
         BranchData branch = {.id = i,
                              .from_bus = from,
+                             .from_status = 1,
                              .to_bus = to,
+                             .to_status = 1,
                              .status = true,
                              .r1 = 0.02 + 0.0001 * i,
                              .x1 = 0.15 + 0.001 * i,

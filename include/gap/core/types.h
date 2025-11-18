@@ -65,6 +65,139 @@ struct SparseMatrix {
     int nnz;                      // Number of non-zero elements
 };
 
+#ifdef __CUDACC__
+#include <cuComplex.h>
+#endif
+
+/**
+ * @brief GPU-resident sparse matrix structure
+ *
+ * Maintains both device pointers for computation and optional host shadow
+ * for debugging/verification. The host shadow can be synchronized on demand.
+ */
+struct GPUSparseMatrix {
+    // Device memory pointers
+    int* d_row_ptr{nullptr};
+    int* d_col_idx{nullptr};
+#ifdef __CUDACC__
+    cuDoubleComplex* d_values{nullptr};
+#else
+    void* d_values{nullptr};  // Opaque pointer when not compiling with nvcc
+#endif
+
+    // Matrix dimensions
+    int num_rows{0};
+    int num_cols{0};
+    int nnz{0};
+
+    // Host shadow copy for debugging (optional)
+    bool has_host_shadow{false};
+    std::vector<int> h_row_ptr;
+    std::vector<int> h_col_idx;
+    std::vector<Complex> h_values;
+
+    // Memory ownership flag
+    bool owns_device_memory{true};
+
+    /**
+     * @brief Synchronize host shadow from device
+     * Copies current device data to host vectors for debugging
+     */
+    void sync_from_device();
+
+    /**
+     * @brief Synchronize device from host shadow
+     * Copies host vectors to device memory
+     */
+    void sync_to_device();
+
+    /**
+     * @brief Allocate device memory
+     */
+    void allocate_device(int rows, int cols, int nonzeros);
+
+    /**
+     * @brief Free device memory
+     */
+    void free_device();
+
+    /**
+     * @brief Get host copy for verification (creates shadow if needed)
+     */
+    SparseMatrix get_host_copy();
+};
+
+/**
+ * @brief GPU-resident power flow data
+ *
+ * Maintains all vectors needed for Newton-Raphson iterations on GPU,
+ * with optional synchronization to CPU for debugging.
+ */
+struct GPUPowerFlowData {
+#ifdef __CUDACC__
+    // Device vectors
+    cuDoubleComplex* d_voltages{nullptr};          // Bus voltage phasors
+    cuDoubleComplex* d_power_injections{nullptr};  // S_specified = P + jQ
+    double* d_mismatches{nullptr};                 // Power mismatches (P and Q)
+    cuDoubleComplex* d_rhs{nullptr};               // RHS for linear system
+    cuDoubleComplex* d_solution{nullptr};          // Solution delta V
+    int* d_bus_types{nullptr};                     // Bus type array
+#else
+    void* d_voltages{nullptr};
+    void* d_power_injections{nullptr};
+    void* d_mismatches{nullptr};
+    void* d_rhs{nullptr};
+    void* d_solution{nullptr};
+    void* d_bus_types{nullptr};
+#endif
+
+    // Dimensions
+    int num_buses{0};
+    int num_pq_buses{0};
+    int num_pv_buses{0};
+    int num_unknowns{0};  // 2*num_pq + num_pv
+
+    // Host shadow for debugging
+    bool has_host_shadow{false};
+    std::vector<Complex> h_voltages;
+    std::vector<Complex> h_power_injections;
+    std::vector<Float> h_mismatches;
+    std::vector<Complex> h_rhs;
+    std::vector<Complex> h_solution;
+    std::vector<int> h_bus_types;
+
+    // Memory ownership
+    bool owns_device_memory{true};
+
+    /**
+     * @brief Allocate device memory for all vectors
+     */
+    void allocate_device(int buses, int unknowns);
+
+    /**
+     * @brief Free all device memory
+     */
+    void free_device();
+
+    /**
+     * @brief Sync specific vector from device for debugging
+     */
+    void sync_voltages_from_device();
+    void sync_mismatches_from_device();
+    void sync_solution_from_device();
+
+    /**
+     * @brief Get snapshot of all state for verification
+     */
+    struct StateSnapshot {
+        std::vector<Complex> voltages;
+        std::vector<Float> mismatches;
+        Float max_mismatch;
+        int iteration;
+    };
+    StateSnapshot get_state_snapshot();
+};
+
 /**
  * @brief Power system bus data - PGM Node equivalent
  */

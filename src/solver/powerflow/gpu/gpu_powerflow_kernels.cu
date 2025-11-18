@@ -127,6 +127,190 @@ __global__ void calculate_jacobian_diagonal_kernel(
 }
 
 /**
+ * @brief CUDA kernel to build full Jacobian matrix for Newton-Raphson power flow
+ *
+ * Jacobian structure:
+ * J = [ ∂P/∂θ   ∂P/∂|V| ]
+ *     [ ∂Q/∂θ   ∂Q/∂|V| ]
+ *
+ * Uses dense matrix format for simplicity with cuDSS solver
+ * Each thread computes one row of the Jacobian
+ */
+__global__ void build_jacobian_dense_kernel(
+    const int* __restrict__ y_row_ptr, const int* __restrict__ y_col_idx,
+    const cuDoubleComplex* __restrict__ y_values, const cuDoubleComplex* __restrict__ voltages,
+    const cuDoubleComplex* __restrict__ powers,  // Calculated S = V * conj(I)
+    const int* __restrict__ bus_types,
+    const int* __restrict__ angle_var_idx,  // Maps bus_id -> angle variable index (-1 if slack)
+    const int* __restrict__ mag_var_idx,  // Maps bus_id -> magnitude variable index (-1 if not PQ)
+    double* __restrict__ jacobian,        // Output: Dense Jacobian matrix (row-major)
+    int num_buses, int num_vars) {
+    int eq_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (eq_idx >= num_vars) return;
+
+    // Determine which bus and equation type
+    int bus_i = -1;
+    bool is_q_equation = false;
+    int current_eq = 0;
+
+    for (int i = 0; i < num_buses; ++i) {
+        if (bus_types[i] == 0) continue;  // Skip slack
+
+        if (current_eq == eq_idx) {
+            bus_i = i;
+            break;
+        }
+        current_eq++;
+
+        if (bus_types[i] == 1) {  // PQ - add Q equation
+            if (current_eq == eq_idx) {
+                bus_i = i;
+                is_q_equation = true;
+                break;
+            }
+            current_eq++;
+        }
+    }
+
+    if (bus_i < 0 || bus_i >= num_buses) return;
+
+    cuDoubleComplex Vi = voltages[bus_i];
+    double Vi_mag = cuCabs(Vi);
+    if (Vi_mag < 1e-9) Vi_mag = 1.0;
+    double theta_i = atan2(cuCimag(Vi), cuCreal(Vi));
+
+    cuDoubleComplex Si = powers[bus_i];
+    double Pi = cuCreal(Si);
+    double Qi = cuCimag(Si);
+
+    // Get Y_ii
+    double G_ii = 0.0, B_ii = 0.0;
+    int row_start = y_row_ptr[bus_i];
+    int row_end = y_row_ptr[bus_i + 1];
+
+    for (int idx = row_start; idx < row_end; ++idx) {
+        if (y_col_idx[idx] == bus_i) {
+            G_ii = cuCreal(y_values[idx]);
+            B_ii = cuCimag(y_values[idx]);
+            break;
+        }
+    }
+
+    double* jac_row = &jacobian[eq_idx * num_vars];
+
+    if (!is_q_equation) {
+        // P equation
+        for (int j = 0; j < num_buses; ++j) {
+            int theta_j_idx = angle_var_idx[j];
+            if (theta_j_idx >= 0) {
+                double deriv;
+                if (j == bus_i) {
+                    deriv = -Qi - B_ii * Vi_mag * Vi_mag;
+                } else {
+                    cuDoubleComplex Vj = voltages[j];
+                    double Vj_mag = cuCabs(Vj);
+                    double theta_j = atan2(cuCimag(Vj), cuCreal(Vj));
+                    double theta_ij = theta_i - theta_j;
+
+                    double G_ij = 0.0, B_ij = 0.0;
+                    for (int idx = row_start; idx < row_end; ++idx) {
+                        if (y_col_idx[idx] == j) {
+                            G_ij = cuCreal(y_values[idx]);
+                            B_ij = cuCimag(y_values[idx]);
+                            break;
+                        }
+                    }
+
+                    deriv = Vi_mag * Vj_mag * (G_ij * sin(theta_ij) - B_ij * cos(theta_ij));
+                }
+                jac_row[theta_j_idx] = deriv;
+            }
+        }
+
+        for (int j = 0; j < num_buses; ++j) {
+            int V_j_idx = mag_var_idx[j];
+            if (V_j_idx >= 0) {
+                double deriv;
+                if (j == bus_i) {
+                    deriv = (Pi / Vi_mag) + G_ii * Vi_mag;
+                } else {
+                    cuDoubleComplex Vj = voltages[j];
+                    double theta_j = atan2(cuCimag(Vj), cuCreal(Vj));
+                    double theta_ij = theta_i - theta_j;
+
+                    double G_ij = 0.0, B_ij = 0.0;
+                    for (int idx = row_start; idx < row_end; ++idx) {
+                        if (y_col_idx[idx] == j) {
+                            G_ij = cuCreal(y_values[idx]);
+                            B_ij = cuCimag(y_values[idx]);
+                            break;
+                        }
+                    }
+
+                    deriv = Vi_mag * (G_ij * cos(theta_ij) + B_ij * sin(theta_ij));
+                }
+                jac_row[V_j_idx] = deriv;
+            }
+        }
+
+    } else {
+        // Q equation
+        for (int j = 0; j < num_buses; ++j) {
+            int theta_j_idx = angle_var_idx[j];
+            if (theta_j_idx >= 0) {
+                double deriv;
+                if (j == bus_i) {
+                    deriv = Pi - G_ii * Vi_mag * Vi_mag;
+                } else {
+                    cuDoubleComplex Vj = voltages[j];
+                    double Vj_mag = cuCabs(Vj);
+                    double theta_j = atan2(cuCimag(Vj), cuCreal(Vj));
+                    double theta_ij = theta_i - theta_j;
+
+                    double G_ij = 0.0, B_ij = 0.0;
+                    for (int idx = row_start; idx < row_end; ++idx) {
+                        if (y_col_idx[idx] == j) {
+                            G_ij = cuCreal(y_values[idx]);
+                            B_ij = cuCimag(y_values[idx]);
+                            break;
+                        }
+                    }
+
+                    deriv = -Vi_mag * Vj_mag * (G_ij * cos(theta_ij) + B_ij * sin(theta_ij));
+                }
+                jac_row[theta_j_idx] = deriv;
+            }
+        }
+
+        for (int j = 0; j < num_buses; ++j) {
+            int V_j_idx = mag_var_idx[j];
+            if (V_j_idx >= 0) {
+                double deriv;
+                if (j == bus_i) {
+                    deriv = (Qi / Vi_mag) - B_ii * Vi_mag;
+                } else {
+                    cuDoubleComplex Vj = voltages[j];
+                    double theta_j = atan2(cuCimag(Vj), cuCreal(Vj));
+                    double theta_ij = theta_i - theta_j;
+
+                    double G_ij = 0.0, B_ij = 0.0;
+                    for (int idx = row_start; idx < row_end; ++idx) {
+                        if (y_col_idx[idx] == j) {
+                            G_ij = cuCreal(y_values[idx]);
+                            B_ij = cuCimag(y_values[idx]);
+                            break;
+                        }
+                    }
+
+                    deriv = Vi_mag * (G_ij * sin(theta_ij) - B_ij * cos(theta_ij));
+                }
+                jac_row[V_j_idx] = deriv;
+            }
+        }
+    }
+}
+
+/**
  * @brief CUDA kernel to calculate off-diagonal Jacobian elements
  *
  * For each non-zero Y_ij, calculate dS_i/dV_j = Y_ij * V_i
@@ -304,6 +488,50 @@ void launch_initialize_flat_start(cuDoubleComplex* d_voltages, const int* d_bus_
 
     initialize_voltages_flat_start_kernel<<<numBlocks, blockSize>>>(
         d_voltages, d_bus_types, d_specified_magnitudes, num_buses);
+
+    cudaDeviceSynchronize();
+}
+
+void launch_build_jacobian_dense(const int* d_y_row_ptr, const int* d_y_col_idx,
+                                 const cuDoubleComplex* d_y_values,
+                                 const cuDoubleComplex* d_voltages, const cuDoubleComplex* d_powers,
+                                 const int* d_bus_types, const int* d_angle_var_idx,
+                                 const int* d_mag_var_idx, double* d_jacobian, int num_buses,
+                                 int num_vars) {
+    int blockSize = 256;
+    int numBlocks = (num_vars + blockSize - 1) / blockSize;
+
+    build_jacobian_dense_kernel<<<numBlocks, blockSize>>>(
+        d_y_row_ptr, d_y_col_idx, d_y_values, d_voltages, d_powers, d_bus_types, d_angle_var_idx,
+        d_mag_var_idx, d_jacobian, num_buses, num_vars);
+
+    cudaDeviceSynchronize();
+}
+
+/**
+ * @brief Helper to calculate power injections: S = V * conj(I)
+ * This is needed before building the Jacobian
+ */
+__global__ void calculate_power_injections_kernel(const cuDoubleComplex* __restrict__ voltages,
+                                                  const cuDoubleComplex* __restrict__ currents,
+                                                  cuDoubleComplex* __restrict__ powers,
+                                                  int num_buses) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_buses) {
+        cuDoubleComplex v = voltages[idx];
+        cuDoubleComplex i_conj = cuConj(currents[idx]);
+        powers[idx] = cuCmul(v, i_conj);
+    }
+}
+
+void launch_calculate_power_injections(const cuDoubleComplex* d_voltages,
+                                       const cuDoubleComplex* d_currents, cuDoubleComplex* d_powers,
+                                       int num_buses) {
+    int blockSize = 256;
+    int numBlocks = (num_buses + blockSize - 1) / blockSize;
+
+    calculate_power_injections_kernel<<<numBlocks, blockSize>>>(d_voltages, d_currents, d_powers,
+                                                                num_buses);
 
     cudaDeviceSynchronize();
 }

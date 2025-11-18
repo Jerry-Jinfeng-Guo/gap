@@ -30,11 +30,15 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
     int* d_voltage_indices_ = nullptr;   // bus_id -> voltage correction index
     double* d_specified_magnitudes_ = nullptr;
     cuDoubleComplex* d_currents_ = nullptr;  // Current injections buffer
+    cuDoubleComplex* d_powers_ = nullptr;    // Power injections S = V * conj(I)
+    double* d_jacobian_ = nullptr;           // Jacobian matrix (dense, row-major)
+    double* d_corrections_ = nullptr;        // Voltage corrections from solver
 
     // Cached network info
     int num_buses_ = 0;
     int num_unknowns_ = 0;
     bool data_initialized_ = false;
+    std::vector<int> h_bus_types_;  // Host copy of bus types for voltage updates
 
     void initialize_cuda() {
         if (initialized_) return;
@@ -60,11 +64,17 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         if (d_voltage_indices_) cudaFree(d_voltage_indices_);
         if (d_specified_magnitudes_) cudaFree(d_specified_magnitudes_);
         if (d_currents_) cudaFree(d_currents_);
+        if (d_powers_) cudaFree(d_powers_);
+        if (d_jacobian_) cudaFree(d_jacobian_);
+        if (d_corrections_) cudaFree(d_corrections_);
 
         d_mismatch_indices_ = nullptr;
         d_voltage_indices_ = nullptr;
         d_specified_magnitudes_ = nullptr;
         d_currents_ = nullptr;
+        d_powers_ = nullptr;
+        d_jacobian_ = nullptr;
+        d_corrections_ = nullptr;
 
         data_initialized_ = false;
     }
@@ -131,6 +141,9 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         LOG_INFO(logger, "  Number of buses:", num_buses_);
         LOG_INFO(logger, "  Number of unknowns:", num_unknowns_);
 
+        // Store bus types for later use in voltage updates
+        h_bus_types_ = h_bus_types;
+
         // Allocate GPU memory for admittance matrix
         gpu_admittance_.allocate_device(admittance_matrix.num_rows, admittance_matrix.num_cols,
                                         admittance_matrix.nnz);
@@ -158,6 +171,9 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         cudaMalloc(&d_voltage_indices_, num_buses_ * sizeof(int));
         cudaMalloc(&d_specified_magnitudes_, num_buses_ * sizeof(double));
         cudaMalloc(&d_currents_, num_buses_ * sizeof(cuDoubleComplex));
+        cudaMalloc(&d_powers_, num_buses_ * sizeof(cuDoubleComplex));
+        cudaMalloc(&d_jacobian_, num_unknowns_ * num_unknowns_ * sizeof(double));
+        cudaMalloc(&d_corrections_, num_unknowns_ * sizeof(double));
 
         // Copy index mappings to device
         cudaMemcpy(d_mismatch_indices_, h_mismatch_indices.data(), num_buses_ * sizeof(int),
@@ -203,6 +219,106 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         LOG_INFO(logger, "GPU data initialization complete");
         LOG_INFO(logger, "  Admittance matrix: ", admittance_matrix.nnz, " non-zeros");
+    }
+
+    /**
+     * @brief Convert dense Jacobian on GPU to sparse CSR format
+     */
+    SparseMatrix convert_dense_to_sparse_jacobian(double* d_dense_jacobian, int n,
+                                                  double threshold) {
+        // Copy dense matrix from device to host
+        std::vector<double> h_jacobian(n * n);
+        cudaMemcpy(h_jacobian.data(), d_dense_jacobian, n * n * sizeof(double),
+                   cudaMemcpyDeviceToHost);
+
+        // Convert to sparse CSR format
+        SparseMatrix sparse;
+        sparse.num_rows = n;
+        sparse.num_cols = n;
+        sparse.row_ptr.resize(n + 1, 0);
+
+        int nnz = 0;
+        sparse.row_ptr[0] = 0;
+
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < n; ++j) {
+                double val = h_jacobian[i * n + j];
+                if (std::abs(val) > threshold) {
+                    sparse.col_idx.push_back(j);
+                    sparse.values.push_back(Complex(val, 0.0));
+                    nnz++;
+                }
+            }
+            sparse.row_ptr[i + 1] = nnz;
+        }
+
+        sparse.nnz = nnz;
+        return sparse;
+    }
+
+    /**
+     * @brief Apply voltage corrections using Newton method
+     */
+    void apply_voltage_corrections(std::vector<double> const& corrections, double damping = 0.9) {
+        if (corrections.size() != static_cast<size_t>(num_unknowns_)) {
+            throw std::runtime_error("Corrections size mismatch");
+        }
+
+        // Get current voltages from GPU
+        gpu_data_.sync_voltages_from_device();
+
+        int corr_idx = 0;
+
+        // Update angles (all non-slack buses)
+        for (int i = 0; i < num_buses_; ++i) {
+            if (h_bus_types_[i] == 0) continue;  // Skip slack
+
+            if (corr_idx < num_unknowns_) {
+                Complex& v = gpu_data_.h_voltages[i];
+                double v_mag = std::abs(v);
+                double v_angle = std::arg(v);
+
+                double delta_theta = damping * corrections[corr_idx];
+                if (std::abs(delta_theta) > 0.15) {
+                    delta_theta = 0.15 * (delta_theta > 0 ? 1.0 : -1.0);
+                }
+                v_angle += delta_theta;
+
+                gpu_data_.h_voltages[i] = Complex(v_mag * cos(v_angle), v_mag * sin(v_angle));
+                corr_idx++;
+            }
+        }
+
+        // Update magnitudes (PQ buses only)
+        for (int i = 0; i < num_buses_; ++i) {
+            if (h_bus_types_[i] != 1) continue;  // Only PQ
+
+            if (corr_idx < num_unknowns_) {
+                Complex& v = gpu_data_.h_voltages[i];
+                double v_mag = std::abs(v);
+                double v_angle = std::arg(v);
+
+                double delta_vmag = damping * corrections[corr_idx];
+                if (std::abs(delta_vmag) > 0.08) {
+                    delta_vmag = 0.08 * (delta_vmag > 0 ? 1.0 : -1.0);
+                }
+                v_mag += delta_vmag;
+                v_mag = std::max(v_mag, 0.5);
+                v_mag = std::min(v_mag, 1.5);
+
+                gpu_data_.h_voltages[i] = Complex(v_mag * cos(v_angle), v_mag * sin(v_angle));
+                corr_idx++;
+            }
+        }
+
+        // Copy back to GPU
+        std::vector<cuDoubleComplex> cu_voltages(num_buses_);
+        for (int i = 0; i < num_buses_; ++i) {
+            cu_voltages[i] = make_cuDoubleComplex(gpu_data_.h_voltages[i].real(),
+                                                  gpu_data_.h_voltages[i].imag());
+        }
+        cudaMemcpy(gpu_data_.d_voltages, cu_voltages.data(), num_buses_ * sizeof(cuDoubleComplex),
+                   cudaMemcpyHostToDevice);
     }
 
   public:
@@ -277,13 +393,63 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
                 break;
             }
 
-            // Step 4: Solve correction equations (Jacobian * delta_V = mismatches)
-            // TODO: Build Jacobian on GPU and use GPU solver
-            // For now, this is a simplified placeholder
+            // Step 4: Build Jacobian matrix on GPU
+            // First, calculate power injections S = V * conj(I)
+            gpu_kernels::launch_calculate_power_injections(gpu_data_.d_voltages, d_currents_,
+                                                           d_powers_, num_buses_);
 
-            // Step 5: Update voltages on GPU
-            // TODO: Use actual correction from solver
-            // Placeholder: small update
+            // Build full Jacobian matrix (dense format for cuDSS)
+            gpu_kernels::launch_build_jacobian_dense(
+                gpu_admittance_.d_row_ptr, gpu_admittance_.d_col_idx, gpu_admittance_.d_values,
+                gpu_data_.d_voltages, d_powers_, gpu_data_.d_bus_types,
+                d_voltage_indices_,   // Actually angle_var_idx
+                d_mismatch_indices_,  // Temporarily reuse for mag_var_idx (TODO: separate arrays)
+                d_jacobian_, num_buses_, num_unknowns_);
+
+            // Step 5: Solve linear system J * ΔX = -F using GPU solver
+            if (!lu_solver_) {
+                LOG_ERROR(logger, "LU solver not set");
+                break;
+            }
+
+            // Convert dense Jacobian to sparse CSR format
+            // For power flow, Jacobian is sparse (similar pattern to Y-bus)
+            SparseMatrix jacobian_sparse = convert_dense_to_sparse_jacobian(
+                d_jacobian_, num_unknowns_, 1e-12  // threshold for sparsity
+            );
+
+            // Factorize Jacobian (only once, or when structure changes)
+            bool factorized = lu_solver_->factorize(jacobian_sparse);
+            if (!factorized) {
+                LOG_ERROR(logger, "Failed to factorize Jacobian at iteration", iter + 1);
+                break;
+            }
+
+            // Prepare RHS: -F (negative mismatches as complex vector)
+            ComplexVector rhs_complex(num_unknowns_);
+            for (int i = 0; i < num_unknowns_; ++i) {
+                rhs_complex[i] = Complex(-gpu_data_.h_mismatches[i], 0.0);
+            }
+
+            // Solve J * ΔX = -F
+            ComplexVector corrections_complex = lu_solver_->solve(rhs_complex);
+
+            // Extract real part (Jacobian is real for power flow)
+            std::vector<double> corrections(num_unknowns_);
+            for (int i = 0; i < num_unknowns_; ++i) {
+                corrections[i] = corrections_complex[i].real();
+            }
+
+            // Copy corrections to GPU
+            cudaMemcpy(d_corrections_, corrections.data(), num_unknowns_ * sizeof(double),
+                       cudaMemcpyHostToDevice);
+
+            // Step 6: Update voltages on GPU with corrections
+            apply_voltage_corrections(corrections, config.acceleration_factor);
+
+            if (config.verbose) {
+                LOG_INFO(logger, "  TODO: Complete Jacobian solve and voltage update");
+            }
 
             if (iter == config.max_iterations - 1) {
                 LOG_INFO(logger, "Failed to converge after", config.max_iterations, "iterations");

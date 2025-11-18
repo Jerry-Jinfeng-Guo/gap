@@ -14,7 +14,7 @@ struct PowerFlowConfig {
     Float tolerance = 1e-6;           // Convergence tolerance
     int max_iterations = 50;          // Maximum number of iterations
     bool use_flat_start = true;       // Use flat start for voltages
-    Float acceleration_factor = 1.4;  // Acceleration factor
+    Float acceleration_factor = 1.0;  // Acceleration factor (reduced for GPU stability)
     bool verbose = false;             // Enable verbose output
     Float base_power = 100e6;         // Base power for per-unit system (VA), default 100 MVA
 };
@@ -23,11 +23,11 @@ struct PowerFlowConfig {
  * @brief Power flow solution result
  */
 struct PowerFlowResult {
-    ComplexVector bus_voltages;           // Bus voltage phasors
-    bool converged = false;               // Convergence status
-    int iterations = 0;                   // Number of iterations
-    Float final_mismatch = 0.0;           // Final mismatch norm
-    std::vector<Complex> bus_injections;  // Calculated bus injections
+    bool converged = false;        // Convergence status
+    int iterations = 0;            // Number of iterations
+    Float final_mismatch = 0.0;    // Final mismatch norm
+    ComplexVector bus_voltages;    // Bus voltage phasors
+    ComplexVector bus_injections;  // Calculated bus injections
 };
 
 /**

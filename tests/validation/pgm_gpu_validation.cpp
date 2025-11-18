@@ -160,6 +160,50 @@ bool test_pgm_case_with_gpu(const std::string& test_name, const std::string& inp
 
     std::cout << "    ✓ CPU converged in " << cpu_result.iterations << " iterations" << std::endl;
 
+    // Validate CPU results against expected PGM output
+    if (!expected_results.empty()) {
+        std::cout << "\n    Validating CPU results against expected PGM results:" << std::endl;
+
+        Float cpu_max_mag_error = 0.0;
+        Float cpu_max_angle_error = 0.0;
+
+        std::cout << "      Bus | Expected |V| | CPU |V|     | Expected ∠ | CPU ∠       | Errors"
+                  << std::endl;
+        std::cout << "      " << std::string(70, '-') << std::endl;
+
+        for (size_t i = 0; i < expected_results.size(); ++i) {
+            Float cpu_mag = std::abs(cpu_result.bus_voltages[i]);
+            Float cpu_angle = std::arg(cpu_result.bus_voltages[i]);
+
+            Float mag_error = std::abs(cpu_mag - expected_results[i].u_pu);
+            Float angle_error = std::abs(cpu_angle - expected_results[i].u_angle);
+
+            printf("      %3d | %11.6f | %11.6f | %10.6f | %10.6f | %8.2e %8.2e\n",
+                   expected_results[i].id, expected_results[i].u_pu, cpu_mag,
+                   expected_results[i].u_angle, cpu_angle, mag_error, angle_error);
+
+            cpu_max_mag_error = std::max(cpu_max_mag_error, mag_error);
+            cpu_max_angle_error = std::max(cpu_max_angle_error, angle_error);
+        }
+
+        std::cout << "      " << std::string(70, '-') << std::endl;
+        std::cout << "      CPU Max magnitude error vs PGM: " << cpu_max_mag_error << " pu"
+                  << std::endl;
+        std::cout << "      CPU Max angle error vs PGM: " << cpu_max_angle_error << " rad"
+                  << std::endl;
+
+        const Float cpu_pgm_tolerance_mag = 0.1;
+        const Float cpu_pgm_tolerance_angle = 0.02;
+
+        if (cpu_max_mag_error > cpu_pgm_tolerance_mag ||
+            cpu_max_angle_error > cpu_pgm_tolerance_angle) {
+            std::cerr << "    ⚠️  CPU results also differ from PGM (likely input parsing issue)"
+                      << std::endl;
+        } else {
+            std::cout << "      ✓ CPU results match PGM expected outputs" << std::endl;
+        }
+    }
+
     // Build admittance matrix and solve with GPU backend
     std::cout << "    Running GPU backend..." << std::endl;
 

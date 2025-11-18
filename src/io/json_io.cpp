@@ -355,10 +355,12 @@ void inferBusTypes(NetworkData& network) {
 
         bool has_source = false;
         bool has_pv_gen = false;
+        const ApplianceData* source_appliance = nullptr;
 
         for (const auto* appliance : it->second) {
             if (appliance->type == ApplianceType::SOURCE) {
                 has_source = true;
+                source_appliance = appliance;
             } else if (appliance->type == ApplianceType::LOADGEN && appliance->p_specified < 0) {
                 // Negative P indicates generation
                 has_pv_gen = true;
@@ -367,6 +369,10 @@ void inferBusTypes(NetworkData& network) {
 
         if (has_source) {
             bus.bus_type = BusType::SLACK;  // Source bus becomes slack
+            // Set slack bus voltage from source u_ref (already in per-unit)
+            if (source_appliance && source_appliance->u_ref > 0.0) {
+                bus.u_pu = source_appliance->u_ref;
+            }
         } else if (has_pv_gen) {
             bus.bus_type = BusType::PV;  // Generator bus becomes PV
         } else {

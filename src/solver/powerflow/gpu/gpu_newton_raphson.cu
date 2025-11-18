@@ -27,7 +27,9 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
     // Index mapping arrays on device
     int* d_mismatch_indices_ = nullptr;  // bus_id -> mismatch vector index
-    int* d_voltage_indices_ = nullptr;   // bus_id -> voltage correction index
+    int* d_voltage_indices_ = nullptr;   // bus_id -> voltage correction index (for complex update)
+    int* d_angle_var_idx_ = nullptr;     // bus_id -> angle variable index in Jacobian
+    int* d_mag_var_idx_ = nullptr;       // bus_id -> magnitude variable index in Jacobian
     double* d_specified_magnitudes_ = nullptr;
     cuDoubleComplex* d_currents_ = nullptr;  // Current injections buffer
     cuDoubleComplex* d_powers_ = nullptr;    // Power injections S = V * conj(I)
@@ -62,6 +64,8 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         if (d_mismatch_indices_) cudaFree(d_mismatch_indices_);
         if (d_voltage_indices_) cudaFree(d_voltage_indices_);
+        if (d_angle_var_idx_) cudaFree(d_angle_var_idx_);
+        if (d_mag_var_idx_) cudaFree(d_mag_var_idx_);
         if (d_specified_magnitudes_) cudaFree(d_specified_magnitudes_);
         if (d_currents_) cudaFree(d_currents_);
         if (d_powers_) cudaFree(d_powers_);
@@ -70,6 +74,8 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         d_mismatch_indices_ = nullptr;
         d_voltage_indices_ = nullptr;
+        d_angle_var_idx_ = nullptr;
+        d_mag_var_idx_ = nullptr;
         d_specified_magnitudes_ = nullptr;
         d_currents_ = nullptr;
         d_powers_ = nullptr;
@@ -79,8 +85,8 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         data_initialized_ = false;
     }
 
-    void initialize_gpu_data(NetworkData const& network_data,
-                             SparseMatrix const& admittance_matrix) {
+    void initialize_gpu_data(NetworkData const& network_data, SparseMatrix const& admittance_matrix,
+                             PowerFlowConfig const& config) {
         auto& logger = gap::logging::global_logger;
         logger.setComponent("GPUNewtonRaphson");
 
@@ -91,27 +97,58 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         num_buses_ = network_data.num_buses;
 
+        // === PER-UNIT SYSTEM NORMALIZATION ===
+        // Calculate base impedance: Z_base = V_base² / S_base
+        Float v_base = network_data.buses[0].u_rated;                  // Base voltage in Volts
+        Float base_impedance = (v_base * v_base) / config.base_power;  // Ohms
+
+        LOG_INFO(logger, "  Base voltage:", v_base / 1e3, "kV");
+        LOG_INFO(logger, "  Base impedance:", base_impedance, "Ohms");
+        LOG_INFO(logger, "  Base power:", config.base_power / 1e6, "MVA");
+
+        // Create per-unit admittance matrix: Y_pu = Y_siemens × Z_base
+        SparseMatrix y_pu = admittance_matrix;  // Copy structure
+        for (size_t i = 0; i < y_pu.values.size(); ++i) {
+            y_pu.values[i] = admittance_matrix.values[i] * base_impedance;
+        }
+
+        num_buses_ = network_data.num_buses;
+
         // Validate inputs
         if (num_buses_ == 0 || network_data.buses.empty()) {
             throw std::runtime_error("Invalid network data: no buses");
         }
 
-        if (admittance_matrix.nnz == 0 || admittance_matrix.row_ptr.empty()) {
+        if (y_pu.nnz == 0 || y_pu.row_ptr.empty()) {
             throw std::runtime_error("Invalid admittance matrix: empty or uninitialized");
         }
 
-        LOG_INFO(logger, "  Admittance matrix: ", admittance_matrix.num_rows, "x",
-                 admittance_matrix.num_cols, ", nnz=", admittance_matrix.nnz);
+        LOG_INFO(logger, "  Admittance matrix: ", y_pu.num_rows, "x", y_pu.num_cols,
+                 ", nnz=", y_pu.nnz);
 
         // Count unknowns and create index mappings
         std::vector<int> h_mismatch_indices(num_buses_, -1);
         std::vector<int> h_voltage_indices(num_buses_, -1);
+        std::vector<int> h_angle_var_idx(num_buses_, -1);  // Angle variable index
+        std::vector<int> h_mag_var_idx(num_buses_, -1);    // Magnitude variable index
         std::vector<double> h_magnitudes(num_buses_, 1.0);
         std::vector<int> h_bus_types(num_buses_);
 
         int mismatch_idx = 0;
         int voltage_idx = 0;
+        int angle_idx = 0;  // Index for angle unknowns in Jacobian
+        int mag_idx = 0;    // Index for magnitude unknowns in Jacobian (starts after all angles)
 
+        // First pass: count angle variables
+        int num_angles = 0;
+        for (size_t i = 0; i < network_data.buses.size(); ++i) {
+            const auto& bus = network_data.buses[i];
+            if (bus.bus_type != BusType::SLACK) {
+                num_angles++;  // All non-slack buses have angle unknowns
+            }
+        }
+
+        // Second pass: assign variable indices
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
             const auto& bus = network_data.buses[i];
             int bus_type_val = static_cast<int>(bus.bus_type);
@@ -122,17 +159,24 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
                 // Slack bus: no unknowns
                 continue;
             } else if (bus.bus_type == BusType::PQ) {
-                // PQ bus: P and Q unknowns
+                // PQ bus: P and Q unknowns, angle and magnitude variables
                 h_mismatch_indices[i] = mismatch_idx;
                 h_voltage_indices[i] = voltage_idx;
-                mismatch_idx += 2;  // P and Q
-                voltage_idx += 2;   // Real and imag parts
+                h_angle_var_idx[i] = angle_idx;
+                h_mag_var_idx[i] = num_angles + mag_idx;  // Magnitudes come after angles
+                mismatch_idx += 2;                        // P and Q
+                voltage_idx += 2;                         // Real and imag parts
+                angle_idx++;
+                mag_idx++;
             } else if (bus.bus_type == BusType::PV) {
-                // PV bus: only P unknown
+                // PV bus: only P unknown, only angle variable (magnitude fixed)
                 h_mismatch_indices[i] = mismatch_idx;
                 h_voltage_indices[i] = voltage_idx;
+                h_angle_var_idx[i] = angle_idx;
+                // h_mag_var_idx[i] remains -1 (no magnitude variable)
                 mismatch_idx += 1;  // Only P
                 voltage_idx += 1;   // Only angle (magnitude fixed)
+                angle_idx++;
             }
         }
 
@@ -144,21 +188,19 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         // Store bus types for later use in voltage updates
         h_bus_types_ = h_bus_types;
 
-        // Allocate GPU memory for admittance matrix
-        gpu_admittance_.allocate_device(admittance_matrix.num_rows, admittance_matrix.num_cols,
-                                        admittance_matrix.nnz);
+        // Allocate GPU memory for per-unit admittance matrix
+        gpu_admittance_.allocate_device(y_pu.num_rows, y_pu.num_cols, y_pu.nnz);
 
-        // Copy admittance matrix to GPU
-        cudaMemcpy(gpu_admittance_.d_row_ptr, admittance_matrix.row_ptr.data(),
-                   (num_buses_ + 1) * sizeof(int), cudaMemcpyHostToDevice);
-        cudaMemcpy(gpu_admittance_.d_col_idx, admittance_matrix.col_idx.data(),
-                   admittance_matrix.nnz * sizeof(int), cudaMemcpyHostToDevice);
+        // Copy per-unit admittance matrix to GPU
+        cudaMemcpy(gpu_admittance_.d_row_ptr, y_pu.row_ptr.data(), (num_buses_ + 1) * sizeof(int),
+                   cudaMemcpyHostToDevice);
+        cudaMemcpy(gpu_admittance_.d_col_idx, y_pu.col_idx.data(), y_pu.nnz * sizeof(int),
+                   cudaMemcpyHostToDevice);
 
         // Convert Complex to cuDoubleComplex
-        std::vector<cuDoubleComplex> cu_values(admittance_matrix.nnz);
-        for (int i = 0; i < admittance_matrix.nnz; ++i) {
-            cu_values[i] = make_cuDoubleComplex(admittance_matrix.values[i].real(),
-                                                admittance_matrix.values[i].imag());
+        std::vector<cuDoubleComplex> cu_values(y_pu.nnz);
+        for (int i = 0; i < y_pu.nnz; ++i) {
+            cu_values[i] = make_cuDoubleComplex(y_pu.values[i].real(), y_pu.values[i].imag());
         }
         cudaMemcpy(gpu_admittance_.d_values, cu_values.data(),
                    admittance_matrix.nnz * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice);
@@ -169,6 +211,8 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         // Allocate index mapping arrays
         cudaMalloc(&d_mismatch_indices_, num_buses_ * sizeof(int));
         cudaMalloc(&d_voltage_indices_, num_buses_ * sizeof(int));
+        cudaMalloc(&d_angle_var_idx_, num_buses_ * sizeof(int));
+        cudaMalloc(&d_mag_var_idx_, num_buses_ * sizeof(int));
         cudaMalloc(&d_specified_magnitudes_, num_buses_ * sizeof(double));
         cudaMalloc(&d_currents_, num_buses_ * sizeof(cuDoubleComplex));
         cudaMalloc(&d_powers_, num_buses_ * sizeof(cuDoubleComplex));
@@ -180,19 +224,28 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
                    cudaMemcpyHostToDevice);
         cudaMemcpy(d_voltage_indices_, h_voltage_indices.data(), num_buses_ * sizeof(int),
                    cudaMemcpyHostToDevice);
+        cudaMemcpy(d_angle_var_idx_, h_angle_var_idx.data(), num_buses_ * sizeof(int),
+                   cudaMemcpyHostToDevice);
+        cudaMemcpy(d_mag_var_idx_, h_mag_var_idx.data(), num_buses_ * sizeof(int),
+                   cudaMemcpyHostToDevice);
         cudaMemcpy(d_specified_magnitudes_, h_magnitudes.data(), num_buses_ * sizeof(double),
                    cudaMemcpyHostToDevice);
         cudaMemcpy(gpu_data_.d_bus_types, h_bus_types.data(), num_buses_ * sizeof(int),
                    cudaMemcpyHostToDevice);
 
         // Copy power injections to device
-        // Aggregate power from buses and appliances
+        // Aggregate power from buses and appliances and convert to per-unit
         std::vector<cuDoubleComplex> h_power_inj(num_buses_, make_cuDoubleComplex(0.0, 0.0));
+
+        // Use base power from config (default 100 MVA = 100e6 VA)
+        double base_power = config.base_power;
 
         // First, power specified directly on buses
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
             const auto& bus = network_data.buses[i];
-            h_power_inj[i] = make_cuDoubleComplex(bus.active_power, bus.reactive_power);
+            // Normalize to per-unit
+            h_power_inj[i] = make_cuDoubleComplex(bus.active_power / base_power,
+                                                  bus.reactive_power / base_power);
         }
 
         // Add power from appliances connected to buses
@@ -203,9 +256,10 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
                 for (size_t i = 0; i < network_data.buses.size(); ++i) {
                     if (network_data.buses[i].id == appliance.node) {
                         cuDoubleComplex existing = h_power_inj[i];
-                        h_power_inj[i] =
-                            make_cuDoubleComplex(cuCreal(existing) + appliance.p_specified,
-                                                 cuCimag(existing) + appliance.q_specified);
+                        // Normalize appliance power to per-unit
+                        h_power_inj[i] = make_cuDoubleComplex(
+                            cuCreal(existing) + appliance.p_specified / base_power,
+                            cuCimag(existing) + appliance.q_specified / base_power);
                         break;
                     }
                 }
@@ -218,7 +272,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         data_initialized_ = true;
 
         LOG_INFO(logger, "GPU data initialization complete");
-        LOG_INFO(logger, "  Admittance matrix: ", admittance_matrix.nnz, " non-zeros");
+        LOG_INFO(logger, "  Admittance matrix: ", y_pu.nnz, " non-zeros");
     }
 
     /**
@@ -271,7 +325,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         // Update angles (all non-slack buses)
         for (int i = 0; i < num_buses_; ++i) {
-            if (h_bus_types_[i] == 0) continue;  // Skip slack
+            if (h_bus_types_[i] == 2) continue;  // Skip slack (BusType::SLACK = 2)
 
             if (corr_idx < num_unknowns_) {
                 Complex& v = gpu_data_.h_voltages[i];
@@ -291,7 +345,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         // Update magnitudes (PQ buses only)
         for (int i = 0; i < num_buses_; ++i) {
-            if (h_bus_types_[i] != 1) continue;  // Only PQ
+            if (h_bus_types_[i] != 0) continue;  // Only PQ (BusType::PQ = 0)
 
             if (corr_idx < num_unknowns_) {
                 Complex& v = gpu_data_.h_voltages[i];
@@ -346,7 +400,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         // Initialize or update GPU data
         if (!data_initialized_ || num_buses_ != network_data.num_buses) {
-            initialize_gpu_data(network_data, admittance_matrix);
+            initialize_gpu_data(network_data, admittance_matrix, config);
         }
 
         // Initialize voltages on GPU
@@ -362,12 +416,15 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         // Newton-Raphson iterations (all on GPU)
         for (int iter = 0; iter < config.max_iterations; ++iter) {
-            // Step 1: Calculate current injections I = Y * V
+            // Calculate current injections I = Y * V
             gpu_kernels::launch_calculate_current_injections(
                 gpu_admittance_.d_row_ptr, gpu_admittance_.d_col_idx, gpu_admittance_.d_values,
                 gpu_data_.d_voltages, d_currents_, num_buses_);
 
             // Step 2: Calculate power mismatches
+            // First zero out the mismatch array (important for sparse writes)
+            cudaMemset(gpu_data_.d_mismatches, 0, num_unknowns_ * sizeof(double));
+
             gpu_kernels::launch_calculate_power_mismatches(
                 gpu_data_.d_voltages, d_currents_, gpu_data_.d_power_injections,
                 gpu_data_.d_bus_types, gpu_data_.d_mismatches, num_buses_, d_mismatch_indices_);
@@ -402,8 +459,8 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
             gpu_kernels::launch_build_jacobian_dense(
                 gpu_admittance_.d_row_ptr, gpu_admittance_.d_col_idx, gpu_admittance_.d_values,
                 gpu_data_.d_voltages, d_powers_, gpu_data_.d_bus_types,
-                d_voltage_indices_,   // Actually angle_var_idx
-                d_mismatch_indices_,  // Temporarily reuse for mag_var_idx (TODO: separate arrays)
+                d_angle_var_idx_,  // Correct: angle variable indices
+                d_mag_var_idx_,    // Correct: magnitude variable indices
                 d_jacobian_, num_buses_, num_unknowns_);
 
             // Step 5: Solve linear system J * ΔX = -F using GPU solver

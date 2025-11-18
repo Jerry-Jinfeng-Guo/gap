@@ -20,6 +20,8 @@ void test_gpu_vs_cpu_lu_solver_correctness();
 void test_gpu_powerflow_convergence();
 void test_gpu_powerflow_different_configs();
 void test_gpu_vs_cpu_powerflow();
+void test_gpu_jacobian_2bus_simple();
+void test_gpu_vs_cpu_jacobian_3bus();
 
 int main() {
     std::cout << "Running GPU tests..." << std::endl;
@@ -44,6 +46,10 @@ int main() {
         test_gpu_powerflow_convergence();
         test_gpu_powerflow_different_configs();
         test_gpu_vs_cpu_powerflow();
+
+        // GPU Jacobian tests
+        test_gpu_jacobian_2bus_simple();
+        test_gpu_vs_cpu_jacobian_3bus();
 
         std::cout << "\nAll GPU tests passed!" << std::endl;
         return 0;

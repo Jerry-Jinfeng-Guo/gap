@@ -57,8 +57,8 @@ __global__ void calculate_power_mismatches_kernel(
     if (bus_idx < num_buses) {
         int bus_type = bus_types[bus_idx];
 
-        // Skip slack bus
-        if (bus_type == 0) return;
+        // Skip slack bus (BusType::SLACK = 2)
+        if (bus_type == 2) return;
 
         // Calculate S_calc = V * conj(I)
         cuDoubleComplex v = voltages[bus_idx];
@@ -71,14 +71,14 @@ __global__ void calculate_power_mismatches_kernel(
         // Get mismatch index
         int mismatch_idx = mismatch_indices[bus_idx];
 
-        if (bus_type == 1) {  // PQ bus
-            // P mismatch
-            mismatches[mismatch_idx] = cuCreal(s_spec) - cuCreal(s_calc);
-            // Q mismatch
-            mismatches[mismatch_idx + 1] = cuCimag(s_spec) - cuCimag(s_calc);
-        } else if (bus_type == 2) {  // PV bus
+        if (bus_type == 0) {  // PQ bus (BusType::PQ = 0)
+            // P mismatch: ΔP = P_calculated - P_specified (Newton-Raphson convention)
+            mismatches[mismatch_idx] = cuCreal(s_calc) - cuCreal(s_spec);
+            // Q mismatch: ΔQ = Q_calculated - Q_specified
+            mismatches[mismatch_idx + 1] = cuCimag(s_calc) - cuCimag(s_spec);
+        } else if (bus_type == 1) {  // PV bus (BusType::PV = 1)
             // Only P mismatch (Q is not specified)
-            mismatches[mismatch_idx] = cuCreal(s_spec) - cuCreal(s_calc);
+            mismatches[mismatch_idx] = cuCreal(s_calc) - cuCreal(s_spec);
         }
     }
 }
@@ -154,7 +154,7 @@ __global__ void build_jacobian_dense_kernel(
     int current_eq = 0;
 
     for (int i = 0; i < num_buses; ++i) {
-        if (bus_types[i] == 0) continue;  // Skip slack
+        if (bus_types[i] == 2) continue;  // Skip slack bus (SLACK=2)
 
         if (current_eq == eq_idx) {
             bus_i = i;
@@ -162,7 +162,7 @@ __global__ void build_jacobian_dense_kernel(
         }
         current_eq++;
 
-        if (bus_types[i] == 1) {  // PQ - add Q equation
+        if (bus_types[i] == 0) {  // PQ bus (PQ=0) - add Q equation
             if (current_eq == eq_idx) {
                 bus_i = i;
                 is_q_equation = true;
@@ -356,8 +356,8 @@ __global__ void update_voltages_kernel(
     if (bus_idx < num_buses) {
         int bus_type = bus_types[bus_idx];
 
-        // Skip slack bus (voltage is fixed)
-        if (bus_type == 0) return;
+        // Skip slack bus (voltage is fixed) - SLACK=2
+        if (bus_type == 2) return;
 
         int delta_idx = voltage_indices[bus_idx];
         if (delta_idx < 0) return;  // Invalid index
@@ -372,8 +372,8 @@ __global__ void update_voltages_kernel(
         // Update voltage
         voltages[bus_idx] = cuCadd(v_old, delta);
 
-        // For PV buses, maintain voltage magnitude
-        if (bus_type == 2) {
+        // For PV buses (PV=1), maintain voltage magnitude
+        if (bus_type == 1) {
             cuDoubleComplex v_new = voltages[bus_idx];
             double mag = cuCabs(v_new);
             double target_mag = cuCabs(v_old);  // Keep original magnitude

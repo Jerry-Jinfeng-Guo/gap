@@ -130,6 +130,155 @@ bool test_pgm_case_with_gpu(const std::string& test_name, const std::string& inp
 }
 
 /**
+ * @brief Detailed investigation of GPU vs CPU accuracy on a single test case
+ */
+void test_pgm_gpu_accuracy_investigation() {
+    std::cout << "\n=== GPU Power Flow Accuracy Investigation ===" << std::endl;
+    std::cout << "Testing: radial_1feeder_2nodepf with various tolerances\n" << std::endl;
+
+    std::string test_data_dir = "../tests/pgm_validation/test_data";
+    if (!fs::exists(test_data_dir)) {
+        test_data_dir = "../../tests/pgm_validation/test_data";
+    }
+
+    std::string input_path = test_data_dir + "/radial_1feeder_2nodepf/input.json";
+
+    if (!fs::exists(input_path)) {
+        std::cerr << "❌ Test case not found" << std::endl;
+        ASSERT_TRUE(false);
+        return;
+    }
+
+    // Load network
+    auto io = core::BackendFactory::create_io_module();
+    NetworkData network = io->read_network_data(input_path);
+
+    std::cout << "Network: " << network.num_buses << " buses, " << network.num_branches
+              << " branches" << std::endl;
+
+    // Test with different tolerances
+    std::vector<Float> tolerances = {1e-6, 1e-8, 1e-10};
+
+    for (Float tol : tolerances) {
+        std::cout << "\n" << std::string(80, '-') << std::endl;
+        std::cout << "Testing with tolerance: " << tol << std::endl;
+        std::cout << std::string(80, '-') << std::endl;
+
+        // CPU solve
+        std::cout << "\nCPU Backend:" << std::endl;
+        auto cpu_admittance = core::BackendFactory::create_admittance_backend(BackendType::CPU);
+        auto cpu_matrix = cpu_admittance->build_admittance_matrix(network);
+
+        auto cpu_pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::CPU);
+        auto cpu_lu_solver = core::BackendFactory::create_lu_solver(BackendType::CPU);
+        cpu_pf_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(cpu_lu_solver.release()));
+
+        solver::PowerFlowConfig config;
+        config.tolerance = tol;
+        config.max_iterations = 100;
+        config.verbose = false;
+
+        auto cpu_result = cpu_pf_solver->solve_power_flow(network, *cpu_matrix, config);
+
+        std::cout << "  Converged: " << (cpu_result.converged ? "YES" : "NO") << std::endl;
+        std::cout << "  Iterations: " << cpu_result.iterations << std::endl;
+        std::cout << "  Final mismatch: " << cpu_result.final_mismatch << std::endl;
+
+        // GPU solve
+        std::cout << "\nGPU Backend:" << std::endl;
+        if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+            std::cout << "  GPU not available, skipping" << std::endl;
+            continue;
+        }
+
+        auto gpu_admittance =
+            core::BackendFactory::create_admittance_backend(BackendType::GPU_CUDA);
+        auto gpu_matrix = gpu_admittance->build_admittance_matrix(network);
+
+        auto gpu_pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
+        auto gpu_lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+        gpu_pf_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(gpu_lu_solver.release()));
+
+        // Enable verbose for GPU solver to see debug output
+        solver::PowerFlowConfig gpu_config = config;
+        gpu_config.verbose = true;
+
+        auto gpu_result = gpu_pf_solver->solve_power_flow(network, *gpu_matrix, gpu_config);
+
+        std::cout << "  Converged: " << (gpu_result.converged ? "YES" : "NO") << std::endl;
+        std::cout << "  Iterations: " << gpu_result.iterations << std::endl;
+        std::cout << "  Final mismatch: " << gpu_result.final_mismatch << std::endl;
+
+        if (!cpu_result.converged || !gpu_result.converged) {
+            std::cout << "\n⚠️  One or both solvers did not converge" << std::endl;
+            continue;
+        }
+
+        // Detailed comparison
+        std::cout << "\nVoltage Comparison:" << std::endl;
+        std::cout << std::string(80, '-') << std::endl;
+        std::cout
+            << "Bus   CPU |V| (pu)  GPU |V| (pu)  Mag Diff    CPU ∠ (deg)  GPU ∠ (deg)  Angle Diff"
+            << std::endl;
+        std::cout << std::string(80, '-') << std::endl;
+
+        Float max_mag_diff = 0.0;
+        Float max_angle_diff = 0.0;
+        Float sum_mag_diff = 0.0;
+        Float sum_angle_diff = 0.0;
+
+        for (size_t i = 0; i < cpu_result.bus_voltages.size(); ++i) {
+            Float cpu_mag = std::abs(cpu_result.bus_voltages[i]);
+            Float gpu_mag = std::abs(gpu_result.bus_voltages[i]);
+            Float cpu_angle = std::arg(cpu_result.bus_voltages[i]) * 180.0 / M_PI;
+            Float gpu_angle = std::arg(gpu_result.bus_voltages[i]) * 180.0 / M_PI;
+
+            Float mag_diff = std::abs(cpu_mag - gpu_mag);
+            Float angle_diff = std::abs(cpu_angle - gpu_angle);
+
+            max_mag_diff = std::max(max_mag_diff, mag_diff);
+            max_angle_diff = std::max(max_angle_diff, angle_diff);
+            sum_mag_diff += mag_diff;
+            sum_angle_diff += angle_diff;
+
+            printf("%3zu   %12.8f  %12.8f  %10.2e  %11.6f  %11.6f  %10.6f\n", i + 1, cpu_mag,
+                   gpu_mag, mag_diff, cpu_angle, gpu_angle, angle_diff);
+        }
+
+        std::cout << std::string(80, '-') << std::endl;
+        std::cout << "Max magnitude difference:  " << max_mag_diff << " pu" << std::endl;
+        std::cout << "Mean magnitude difference: " << sum_mag_diff / cpu_result.bus_voltages.size()
+                  << " pu" << std::endl;
+        std::cout << "Max angle difference:      " << max_angle_diff << " degrees" << std::endl;
+        std::cout << "Mean angle difference:     "
+                  << sum_angle_diff / cpu_result.bus_voltages.size() << " degrees" << std::endl;
+
+        // Check if differences are acceptable
+        const Float acceptable_mag_diff = tol * 100;     // 100x tolerance
+        const Float acceptable_angle_diff = tol * 1000;  // Angles are more sensitive
+
+        if (max_mag_diff < acceptable_mag_diff && max_angle_diff < acceptable_angle_diff) {
+            std::cout << "\n✅ Results match within acceptable bounds for tolerance " << tol
+                      << std::endl;
+        } else {
+            std::cout << "\n⚠️  Differences exceed acceptable bounds:" << std::endl;
+            if (max_mag_diff >= acceptable_mag_diff) {
+                std::cout << "   Magnitude diff " << max_mag_diff << " >= " << acceptable_mag_diff
+                          << std::endl;
+            }
+            if (max_angle_diff >= acceptable_angle_diff) {
+                std::cout << "   Angle diff " << max_angle_diff << " >= " << acceptable_angle_diff
+                          << std::endl;
+            }
+        }
+    }
+
+    std::cout << "\n" << std::string(80, '=') << std::endl;
+    std::cout << "Investigation complete" << std::endl;
+    std::cout << std::string(80, '=') << std::endl;
+}
+
+/**
  * @brief Run all PGM validation tests with GPU backend
  */
 void test_pgm_gpu_all_cases() {
@@ -247,6 +396,15 @@ void test_pgm_gpu_smoke_test() {
 
 // Register tests with the test runner
 void register_pgm_gpu_validation_tests(TestRunner& runner) {
-    // Only register the smoke test, not the full suite to avoid stalling
-    runner.add_test("PGM GPU Validation", test_pgm_gpu_smoke_test);
+    std::cout << "Registering PGM GPU validation tests..." << std::endl;
+
+    // Accuracy investigation test - detailed analysis of CPU vs GPU
+    runner.add_test("PGM GPU Accuracy Investigation",
+                    []() { test_pgm_gpu_accuracy_investigation(); });
+
+    // Smoke test - quick validation with single case
+    runner.add_test("PGM GPU Smoke Test", []() { test_pgm_gpu_smoke_test(); });
+
+    // Full test suite - commented out to avoid long runtime
+    // runner.add_test("PGM GPU All Cases", []() { test_pgm_gpu_all_cases(); });
 }

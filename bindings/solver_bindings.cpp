@@ -57,8 +57,8 @@ void init_solver_bindings(pybind11::module& m) {
         "solve_simple_power_flow",
         [](const std::vector<std::vector<double>>& bus_data,
            const std::vector<std::vector<double>>& branch_data, double tolerance = 1e-6,
-           int max_iterations = 50, bool verbose = false,
-           double base_power = 100e6) -> std::vector<std::vector<double>> {
+           int max_iterations = 50, bool verbose = false, double base_power = 100e6,
+           std::string backend = "cpu") -> std::vector<std::vector<double>> {
             try {
                 // Convert basic types to internal structures
                 NetworkData network_data;
@@ -117,26 +117,39 @@ void init_solver_bindings(pybind11::module& m) {
                 config.verbose = verbose;
                 config.base_power = base_power;
 
-                // Create CPU solver and solve
-                auto solver = core::BackendFactory::create_powerflow_solver(BackendType::CPU);
+                // Determine backend type
+                BackendType backend_type = BackendType::CPU;
+                if (backend == "gpu" || backend == "GPU" || backend == "cuda" ||
+                    backend == "CUDA") {
+                    backend_type = BackendType::GPU_CUDA;
+                }
+
+                // Check if backend is available
+                if (!core::BackendFactory::is_backend_available(backend_type)) {
+                    throw std::runtime_error("Requested backend '" + backend +
+                                             "' is not available");
+                }
+
+                // Create solver and solve
+                auto solver = core::BackendFactory::create_powerflow_solver(backend_type);
                 if (!solver) {
-                    throw std::runtime_error("Failed to create CPU solver");
+                    throw std::runtime_error("Failed to create solver");
                 }
 
                 // Create LU solver backend
                 std::shared_ptr<solver::ILUSolver> lu_solver(
-                    core::BackendFactory::create_lu_solver(BackendType::CPU).release());
+                    core::BackendFactory::create_lu_solver(backend_type).release());
                 if (!lu_solver) {
-                    throw std::runtime_error("Failed to create CPU LU solver");
+                    throw std::runtime_error("Failed to create LU solver");
                 }
 
                 // Set LU solver on the powerflow solver
                 solver->set_lu_solver(lu_solver);
 
                 auto admittance_builder =
-                    core::BackendFactory::create_admittance_backend(BackendType::CPU);
+                    core::BackendFactory::create_admittance_backend(backend_type);
                 if (!admittance_builder) {
-                    throw std::runtime_error("Failed to create CPU admittance builder");
+                    throw std::runtime_error("Failed to create admittance builder");
                 }
 
                 auto admittance_matrix = admittance_builder->build_admittance_matrix(network_data);
@@ -169,7 +182,7 @@ void init_solver_bindings(pybind11::module& m) {
         },
         "Solve power flow using only basic Python types (ultra-minimal API)", py::arg("bus_data"),
         py::arg("branch_data"), py::arg("tolerance") = 1e-6, py::arg("max_iterations") = 50,
-        py::arg("verbose") = false, py::arg("base_power") = 100e6,
+        py::arg("verbose") = false, py::arg("base_power") = 100e6, py::arg("backend") = "cpu",
         R"(
           Solve power flow using only basic Python lists and numbers.
           
@@ -193,6 +206,7 @@ void init_solver_bindings(pybind11::module& m) {
               max_iterations: Maximum iterations (default: 50)
               verbose: Enable verbose output (default: False)
               base_power: Base power for per-unit system in VA (default: 100e6 = 100 MVA)
+              backend: Computation backend - 'cpu' or 'gpu' (default: 'cpu')
           
           Returns:
               List of voltage results, each voltage: [real, imag, magnitude, angle_rad]

@@ -19,6 +19,7 @@ void test_gpu_lu_solver_memory_management();
 void test_gpu_vs_cpu_lu_solver_correctness();
 void test_gpu_powerflow_convergence();
 void test_gpu_powerflow_different_configs();
+void test_gpu_vs_cpu_powerflow();
 
 int main() {
     std::cout << "Running GPU tests..." << std::endl;
@@ -42,8 +43,9 @@ int main() {
         // GPU Power Flow tests
         test_gpu_powerflow_convergence();
         test_gpu_powerflow_different_configs();
+        test_gpu_vs_cpu_powerflow();
 
-        std::cout << "All GPU tests passed!" << std::endl;
+        std::cout << "\nAll GPU tests passed!" << std::endl;
         return 0;
     } catch (const std::exception& e) {
         std::cerr << "Test failed: " << e.what() << std::endl;

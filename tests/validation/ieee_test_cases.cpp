@@ -10,12 +10,14 @@ using namespace gap;
 // Forward declaration for LU solver validation tests
 void register_lu_solver_validation_tests(TestRunner& runner);
 
+// Forward declaration for PGM GPU validation tests
+void register_pgm_gpu_validation_tests(TestRunner& runner);
+
 /**
- * @brief Backend comparison test
+ * @brief Backend comparison test - CPU vs GPU
  */
 void test_backend_comparison() {
-    // TODO: Skip GPU comparison until GPU power flow is fully implemented
-    std::cout << "Running CPU backend validation (GPU comparison skipped)..." << std::endl;
+    std::cout << "Running backend comparison validation (CPU vs GPU)..." << std::endl;
 
     // Create identical test case for both backends
     NetworkData network;
@@ -93,10 +95,35 @@ void test_backend_comparison() {
 
     auto cpu_result = cpu_pf_solver->solve_power_flow(network, matrix, config);
 
-    // TODO: Skip GPU comparison until GPU power flow implementation is completed
     std::cout << "  CPU result: " << (cpu_result.converged ? "CONVERGED" : "NOT CONVERGED")
               << " in " << cpu_result.iterations << " iterations" << std::endl;
-    std::cout << "  GPU result: SKIPPED (implementation incomplete)" << std::endl;
+
+    // Test GPU (now fully implemented!)
+    if (core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+        auto gpu_pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
+        auto gpu_lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+        gpu_pf_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(gpu_lu_solver.release()));
+
+        auto gpu_result = gpu_pf_solver->solve_power_flow(network, matrix, config);
+
+        std::cout << "  GPU result: " << (gpu_result.converged ? "CONVERGED" : "NOT CONVERGED")
+                  << " in " << gpu_result.iterations << " iterations" << std::endl;
+
+        // Compare results
+        if (cpu_result.converged && gpu_result.converged) {
+            Float max_diff = 0.0;
+            for (size_t i = 0; i < cpu_result.bus_voltages.size(); ++i) {
+                Float diff = std::abs(cpu_result.bus_voltages[i] - gpu_result.bus_voltages[i]);
+                max_diff = std::max(max_diff, diff);
+            }
+            std::cout << "  Maximum voltage difference (CPU vs GPU): " << max_diff << " pu"
+                      << std::endl;
+            ASSERT_TRUE(max_diff < 1e-4);  // Results should match within 0.01%
+            std::cout << "  ✓ CPU and GPU results match!" << std::endl;
+        }
+    } else {
+        std::cout << "  GPU result: SKIPPED (GPU not available)" << std::endl;
+    }
 
     // Placeholder result check - just verify CPU results are reasonable
     ASSERT_EQ(5, cpu_result.bus_voltages.size());
@@ -111,4 +138,7 @@ void register_validation_tests(TestRunner& runner) {
 
     // Register LU solver validation tests
     register_lu_solver_validation_tests(runner);
+
+    // Register PGM GPU validation tests
+    register_pgm_gpu_validation_tests(runner);
 }

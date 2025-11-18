@@ -55,6 +55,7 @@ class ValidationResult:
     max_angle_error_deg: float
     mean_voltage_error_pu: float
     mean_angle_error_deg: float
+    backend: str = "cpu"
     pgm_calculation_time: Optional[float] = None
     n_nodes: Optional[int] = None
     n_lines: Optional[int] = None
@@ -66,11 +67,16 @@ class ValidationRunner:
     """Runs validation tests for GAP solver against PGM reference solutions."""
 
     def __init__(
-        self, test_data_dir: Path, base_power: float = None, verbose: bool = False
+        self,
+        test_data_dir: Path,
+        base_power: float = None,
+        verbose: bool = False,
+        backend: str = "cpu",
     ):
         self.test_data_dir = test_data_dir
         self.base_power = base_power
         self.verbose = verbose
+        self.backend = backend
         self.results: List[ValidationResult] = []
 
     def discover_test_cases(self) -> List[Path]:
@@ -161,6 +167,7 @@ class ValidationRunner:
             max_iterations=20,
             verbose=self.verbose,
             base_power=network.base_power,
+            backend=self.backend,
         )
         calc_time = time.time() - start_time
 
@@ -299,6 +306,7 @@ class ValidationRunner:
                     max_angle_error_deg=0.0,
                     mean_voltage_error_pu=0.0,
                     mean_angle_error_deg=0.0,
+                    backend=self.backend,
                     error_message="Solver did not converge",
                 )
 
@@ -330,6 +338,7 @@ class ValidationRunner:
                 max_angle_error_deg=max_a_err,
                 mean_voltage_error_pu=mean_v_err,
                 mean_angle_error_deg=mean_a_err,
+                backend=self.backend,
                 pgm_calculation_time=pgm_calc_time,
                 n_nodes=n_nodes,
                 n_lines=n_lines,
@@ -348,6 +357,7 @@ class ValidationRunner:
                 max_angle_error_deg=0.0,
                 mean_voltage_error_pu=0.0,
                 mean_angle_error_deg=0.0,
+                backend=self.backend,
                 error_message=str(e),
             )
 
@@ -539,20 +549,76 @@ def main():
         default=Path(__file__).parent / "test_data",
         help="Path to test data directory",
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default="cpu",
+        choices=["cpu", "gpu", "both"],
+        help="Computation backend: cpu, gpu, or both (default: cpu)",
+    )
 
     args = parser.parse_args()
 
-    runner = ValidationRunner(
-        test_data_dir=args.test_data_dir,
-        base_power=args.base_power,
-        verbose=args.verbose,
-    )
+    # Run with specified backend(s)
+    backends_to_test = ["cpu", "gpu"] if args.backend == "both" else [args.backend]
 
-    runner.run_all(specific_test=args.test_case)
-    runner.print_summary(detailed=args.detailed)
+    all_results = {}
 
-    if args.per_node:
-        runner.print_detailed_results(test_case_name=args.test_case)
+    for backend in backends_to_test:
+        print(f"\n{'='*80}")
+        print(f"Testing with {backend.upper()} backend")
+        print(f"{'='*80}")
+
+        runner = ValidationRunner(
+            test_data_dir=args.test_data_dir,
+            base_power=args.base_power,
+            verbose=args.verbose,
+            backend=backend,
+        )
+
+        runner.run_all(specific_test=args.test_case)
+        runner.print_summary(detailed=args.detailed)
+
+        if args.per_node:
+            runner.print_detailed_results(test_case_name=args.test_case)
+
+        all_results[backend] = runner.results
+
+    # If comparing both backends, show comparison
+    if args.backend == "both" and "cpu" in all_results and "gpu" in all_results:
+        print(f"\n{'='*80}")
+        print("CPU vs GPU Backend Comparison")
+        print(f"{'='*80}\n")
+        print(
+            f"{'Test Case':<25} {'CPU Time (ms)':<15} {'GPU Time (ms)':<15} {'Speedup':<10} {'Match':<10}"
+        )
+        print("-" * 80)
+
+        cpu_results = {r.test_case: r for r in all_results["cpu"]}
+        gpu_results = {r.test_case: r for r in all_results["gpu"]}
+
+        for test_name in sorted(cpu_results.keys()):
+            if test_name in gpu_results:
+                cpu_r = cpu_results[test_name]
+                gpu_r = gpu_results[test_name]
+
+                if cpu_r.converged and gpu_r.converged:
+                    cpu_time_ms = cpu_r.calculation_time * 1000
+                    gpu_time_ms = gpu_r.calculation_time * 1000
+                    speedup = cpu_time_ms / gpu_time_ms if gpu_time_ms > 0 else 0
+
+                    # Check if results match
+                    v_diff = abs(
+                        cpu_r.max_voltage_error_pu - gpu_r.max_voltage_error_pu
+                    )
+                    match = "✅ Yes" if v_diff < 1e-4 else "⚠️ Diff"
+
+                    print(
+                        f"{test_name:<25} {cpu_time_ms:<15.2f} {gpu_time_ms:<15.2f} "
+                        f"{speedup:<10.2f}x {match:<10}"
+                    )
+
+        print("-" * 80)
 
     # Exit with error code if any tests failed
     if any(not r.success for r in runner.results):

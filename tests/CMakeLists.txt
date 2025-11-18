@@ -26,6 +26,7 @@ add_executable(gap_validation_tests
     validation/validation_main.cpp
     validation/ieee_test_cases.cpp
     validation/lu_solver_validation.cpp
+    validation/pgm_gpu_validation.cpp
 )
 
 target_include_directories(gap_validation_tests PUBLIC
@@ -39,6 +40,15 @@ target_link_libraries(gap_validation_tests
     gap_lu_cpu
     gap_powerflow_cpu
 )
+
+# Add GPU libraries if CUDA is enabled
+if(GAP_ENABLE_CUDA)
+    target_link_libraries(gap_validation_tests
+        gap_admittance_gpu
+        gap_lu_gpu
+        gap_powerflow_gpu
+    )
+endif()
 
 # Add tests to CTest
 add_test(NAME UnitTests COMMAND gap_unit_tests)

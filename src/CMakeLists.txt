@@ -84,20 +84,79 @@ target_link_libraries(gap_lu_cpu
 
 # GPU LU Solver Backend (only if CUDA is enabled)
 if(GAP_ENABLE_CUDA)
-    add_library(gap_lu_gpu SHARED
-        solver/lu/gpu/gpu_lu_solver.cu
-    )
+    # Determine which GPU solver to build
+    if(NOT DEFINED GAP_GPU_SOLVER_TYPE)
+        set(GAP_GPU_SOLVER_TYPE "CUDSS" CACHE STRING "GPU solver type: CUDSS or LU")
+    endif()
+    
+    if(GAP_GPU_SOLVER_TYPE STREQUAL "CUDSS")
+        message(STATUS "Building GPU Solver with cuDSS (CUDA Direct Sparse Solver)")
+        
+        # Find cuDSS (not required - will fall back to LU if not found)
+        find_package(cudss QUIET PATHS /usr/local/cudss/lib/cmake/cudss)
+        
+        if(cudss_FOUND)
+            message(STATUS "  cuDSS found at: ${cudss_DIR}")
+            
+            add_library(gap_lu_gpu SHARED
+                solver/lu/gpu/gpu_cudss_solver.cu
+            )
 
-    target_include_directories(gap_lu_gpu PUBLIC
-        ${CMAKE_SOURCE_DIR}/include
-    )
+            target_include_directories(gap_lu_gpu PUBLIC
+                ${CMAKE_SOURCE_DIR}/include
+                /usr/local/cudss/include
+            )
 
-    target_link_libraries(gap_lu_gpu
-        gap_core
-        CUDA::cudart
-        CUDA::cublas
-        CUDA::cusolver
-    )
+            target_link_libraries(gap_lu_gpu
+                gap_core
+                CUDA::cudart
+                cudss
+            )
+        else()
+            message(WARNING "cuDSS not found! Falling back to legacy cuSOLVER LU solver.")
+            message(WARNING "  To install cuDSS, visit: https://developer.nvidia.com/cudss")
+            message(WARNING "  Falling back to: --solver LU")
+            set(GAP_GPU_SOLVER_TYPE "LU" CACHE STRING "GPU solver type" FORCE)
+            
+            add_library(gap_lu_gpu SHARED
+                solver/lu/gpu/gpu_lu_solver.cu
+            )
+
+            target_include_directories(gap_lu_gpu PUBLIC
+                ${CMAKE_SOURCE_DIR}/include
+            )
+
+            target_link_libraries(gap_lu_gpu
+                gap_core
+                CUDA::cudart
+                CUDA::cublas
+                CUDA::cusolver
+                CUDA::cusparse
+            )
+        endif()
+        
+    elseif(GAP_GPU_SOLVER_TYPE STREQUAL "LU")
+        message(STATUS "Building GPU Solver with legacy cuSOLVER LU")
+        
+        add_library(gap_lu_gpu SHARED
+            solver/lu/gpu/gpu_lu_solver.cu
+        )
+
+        target_include_directories(gap_lu_gpu PUBLIC
+            ${CMAKE_SOURCE_DIR}/include
+        )
+
+        target_link_libraries(gap_lu_gpu
+            gap_core
+            CUDA::cudart
+            CUDA::cublas
+            CUDA::cusolver
+            CUDA::cusparse
+        )
+        
+    else()
+        message(FATAL_ERROR "Invalid GAP_GPU_SOLVER_TYPE: ${GAP_GPU_SOLVER_TYPE}. Must be CUDSS or LU")
+    endif()
 
     set_target_properties(gap_lu_gpu PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON

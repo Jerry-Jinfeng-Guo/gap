@@ -7,6 +7,7 @@
 #include <iostream>
 #include <memory>
 
+#include "gap/logging/logger.h"
 #include "gap/solver/lu_solver_interface.h"
 
 namespace gap::solver {
@@ -86,12 +87,15 @@ class GPULUSolver : public ILUSolver {
     }
 
     bool factorize(SparseMatrix const& matrix) override {
-        std::cout << "GPULUSolver: Performing LU factorization on GPU" << std::endl;
-        std::cout << "  Matrix size: " << matrix.num_rows << "x" << matrix.num_cols << std::endl;
-        std::cout << "  Non-zeros: " << matrix.nnz << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("GPULUSolver");
+
+        logger.logInfo("Performing LU factorization on GPU");
+        LOG_DEBUG(logger, "Matrix size:", matrix.num_rows, "x", matrix.num_cols);
+        LOG_DEBUG(logger, "Non-zeros:", matrix.nnz);
 
         if (matrix.num_rows != matrix.num_cols) {
-            std::cerr << "Matrix must be square for LU factorization" << std::endl;
+            logger.logError("Matrix must be square for LU factorization");
             return false;
         }
 
@@ -115,17 +119,21 @@ class GPULUSolver : public ILUSolver {
         cusparseSetMatIndexBase(descr_A_, CUSPARSE_INDEX_BASE_ZERO);
 
         factorized_ = true;
-        std::cout << "  GPU LU factorization completed successfully" << std::endl;
+        LOG_INFO(logger, "  GPU LU factorization completed successfully");
         return true;
     }
 
     ComplexVector solve(ComplexVector const& rhs) override {
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("GPULUSolver");
+
         if (!factorized_) {
+            logger.logError("Matrix not factorized. Call factorize() first.");
             throw std::runtime_error("Matrix not factorized. Call factorize() first.");
         }
 
-        std::cout << "GPULUSolver: Solving linear system on GPU" << std::endl;
-        std::cout << "  RHS size: " << rhs.size() << std::endl;
+        logger.logInfo("Solving linear system on GPU");
+        LOG_DEBUG(logger, "RHS size:", rhs.size());
 
         if (static_cast<int>(rhs.size()) != matrix_size_) {
             throw std::runtime_error("RHS size does not match matrix dimension");
@@ -151,16 +159,15 @@ class GPULUSolver : public ILUSolver {
             cu_solution.data(), &singularity);
 
         if (status != CUSOLVER_STATUS_SUCCESS) {
-            std::cerr << "  cuSOLVER solve failed with status: " << status << std::endl;
+            logger.logError("cuSOLVER solve failed with status: " + std::to_string(status));
             if (singularity >= 0) {
-                std::cerr << "  Matrix is singular at row: " << singularity << std::endl;
+                logger.logError("Matrix is singular at row: " + std::to_string(singularity));
             }
             throw std::runtime_error("cuSOLVER LU solve failed");
         }
 
         if (singularity >= 0) {
-            std::cerr << "  Warning: Matrix is numerically singular at row: " << singularity
-                      << std::endl;
+            LOG_WARN(logger, "Matrix is numerically singular at row:", singularity);
         }
 
         // Convert back to Complex
@@ -169,13 +176,16 @@ class GPULUSolver : public ILUSolver {
             solution[i] = Complex(cuCreal(cu_solution[i]), cuCimag(cu_solution[i]));
         }
 
-        std::cout << "  GPU linear solve completed" << std::endl;
+        LOG_INFO(logger, "  GPU linear solve completed");
 
         return solution;
     }
 
     bool update_factorization(SparseMatrix const& matrix) override {
-        std::cout << "GPULUSolver: Updating factorization on GPU" << std::endl;
+        auto& logger = gap::logging::global_logger;
+        logger.setComponent("GPULUSolver");
+
+        logger.logInfo("Updating factorization on GPU");
 
         // For now, perform full refactorization
         // Future optimization: implement efficient update when only values change

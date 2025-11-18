@@ -11,6 +11,7 @@ CLEAN_BUILD=false
 PYTHON_BINDINGS="ON"
 VERBOSE=false
 PARALLEL_JOBS=$(nproc)
+GPU_SOLVER="CUDSS"  # CUDSS or LU
 
 # Get the directory of this script and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,6 +33,8 @@ USAGE:
 
 OPTIONS:
     --cuda ON|OFF           Enable/disable CUDA support (default: OFF)
+    --solver CUDSS|LU       GPU solver type: CUDSS or LU (default: CUDSS)
+                           Note: If cuDSS is not found, build automatically falls back to LU
     --build-type TYPE       Build type: Debug, Release, RelWithDebInfo (default: Release)
     --python ON|OFF         Enable/disable Python bindings (default: ON)
     --clean                 Clean build directory before building
@@ -40,15 +43,18 @@ OPTIONS:
     -h, --help              Show this help message
 
 EXAMPLES:
-    $0                      # CPU-only build with Python bindings
-    $0 --cuda ON            # CUDA-enabled build
-    $0 --cuda ON --clean    # Clean CUDA build
-    $0 --python OFF         # Build without Python bindings
-    $0 --build-type Debug   # Debug build
+    $0                              # CPU-only build with Python bindings
+    $0 --cuda ON                    # CUDA-enabled build with cuDSS solver
+    $0 --cuda ON --solver LU        # CUDA build with legacy LU solver
+    $0 --cuda ON --clean            # Clean CUDA build
+    $0 --python OFF                 # Build without Python bindings
+    $0 --build-type Debug           # Debug build
 
 REQUIREMENTS:
     - Python 3.8+ with virtual environment at .venv/
-    - For CUDA builds: CUDA Toolkit 11.0+
+    - For CUDA builds: CUDA Toolkit 13.0+
+    - For cuDSS solver (recommended): cuDSS library from NVIDIA
+      (build will fall back to cuSOLVER LU if cuDSS not found)
     - CMake 3.18+
     - C++20 compatible compiler
 EOF
@@ -64,6 +70,17 @@ while [[ $# -gt 0 ]]; do
                 ENABLE_CUDA="OFF"
             else
                 echo "Error: Invalid CUDA option '$2'. Use ON or OFF."
+                exit 1
+            fi
+            shift 2
+            ;;
+        --solver)
+            if [[ "$2" == "CUDSS" || "$2" == "cudss" ]]; then
+                GPU_SOLVER="CUDSS"
+            elif [[ "$2" == "LU" || "$2" == "lu" ]]; then
+                GPU_SOLVER="LU"
+            else
+                echo "Error: Invalid solver option '$2'. Use CUDSS or LU."
                 exit 1
             fi
             shift 2
@@ -123,6 +140,9 @@ echo "        GAP Unified Build Script      "
 echo "======================================"
 echo "Configuration:"
 echo "  CUDA support: $ENABLE_CUDA"
+if [ "$ENABLE_CUDA" = "ON" ]; then
+    echo "  GPU solver: $GPU_SOLVER"
+fi
 echo "  Build type: $BUILD_TYPE"
 echo "  Python bindings: $PYTHON_BINDINGS"
 echo "  Parallel jobs: $PARALLEL_JOBS"
@@ -175,6 +195,22 @@ if [ "$ENABLE_CUDA" = "ON" ]; then
     
     CUDA_VERSION=$(nvcc --version | grep "release" | awk '{print $5}' | tr -d ',' || echo "unknown")
     echo "CUDA version: $CUDA_VERSION"
+    
+    # Check for cuDSS if CUDSS solver is requested
+    if [ "$GPU_SOLVER" = "CUDSS" ]; then
+        if [ -d "/usr/local/cudss" ] || [ -n "$(find /usr/local -name "cudss.h" 2>/dev/null | head -n1)" ]; then
+            echo "cuDSS library: Found"
+        else
+            echo ""
+            echo "⚠️  Warning: cuDSS library not found!"
+            echo "   The build will automatically fall back to legacy cuSOLVER LU solver."
+            echo "   For better performance, install cuDSS from:"
+            echo "   https://developer.nvidia.com/cudss"
+            echo ""
+            echo "   Alternatively, explicitly use: $0 --cuda ON --solver LU"
+            echo ""
+        fi
+    fi
 fi
 
 # Clean build directory if requested
@@ -193,6 +229,11 @@ CMAKE_ARGS=(
     "-DGAP_BUILD_PYTHON_BINDINGS=$PYTHON_BINDINGS"
     "-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
 )
+
+# Add GPU solver type if CUDA is enabled
+if [ "$ENABLE_CUDA" = "ON" ]; then
+    CMAKE_ARGS+=("-DGAP_GPU_SOLVER_TYPE=$GPU_SOLVER")
+fi
 
 # Add Python executable if bindings are enabled
 if [ "$PYTHON_BINDINGS" = "ON" ]; then

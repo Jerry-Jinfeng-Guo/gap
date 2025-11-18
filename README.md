@@ -41,7 +41,7 @@ GAP (GPU-Accelerated Power flow) is a modern C++20 power flow solver designed fo
 ### Backend Types
 
 - **CPU Backend**: Optimized C++ with enhanced sparse linear algebra and CSR format validation
-- **GPU Backend**: CUDA-accelerated with cuBLAS, cuSPARSE, and cuSOLVER integration
+- **GPU Backend**: CUDA-accelerated with cuDSS (Direct Sparse Solver) or legacy cuSOLVER support
 
 ### Python Bindings
 
@@ -83,7 +83,9 @@ See `bindings/README.md` for complete Python API documentation.
 ### GPU Requirements (Optional)
 - NVIDIA GPU with Compute Capability 6.0+
 - **CUDA Toolkit 13.0+** (recommended for best performance)
-- cuBLAS, cuSPARSE, cuSOLVER libraries
+- **cuDSS 0.7.1+** (for modern GPU solver, recommended)
+- cuBLAS, cuSPARSE libraries (always required)
+- cuSOLVER library (for legacy LU solver only)
 
 ## Building
 
@@ -98,8 +100,11 @@ cd gap
 # CPU-only build
 ./build.sh --cuda OFF -c
 
-# GPU-enabled build (with CUDA 13 + GCC 14)
+# GPU-enabled build with cuDSS solver (default, recommended)
 ./build.sh --cuda ON -c
+
+# GPU-enabled build with legacy LU solver
+./build.sh --cuda ON --solver LU -c
 
 # Debug build with full validation
 ./build.sh --cuda ON -c -t Debug

@@ -411,6 +411,7 @@ void test_lu_solver_scalability() {
 /**
  * @brief GPU vs CPU performance comparison across matrix sizes
  * Benchmarks factorization and solve performance for both backends
+ * GPU uses cuDSS direct sparse solver (LU with partial pivoting)
  */
 void test_lu_solver_gpu_vs_cpu_performance() {
     if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
@@ -491,8 +492,8 @@ void test_lu_solver_gpu_vs_cpu_performance() {
 
     std::cout << std::string(130, '-') << std::endl;
     std::cout << "\nNote: GPU performance characteristics:" << std::endl;
-    std::cout << "  - cusolverSp uses host-based sparse LU (runs on CPU with CUDA optimizations)"
-              << std::endl;
+    std::cout << "  - GPU solver uses NVIDIA cuDSS (CUDA Direct Sparse Solver)" << std::endl;
+    std::cout << "  - LU factorization with partial pivoting on GPU device" << std::endl;
     std::cout << "  - Best for medium-to-large matrices (>200 buses)" << std::endl;
     std::cout << "  - Performance varies with matrix structure and fill-in patterns" << std::endl;
     std::cout << "  ✓ Correctness verified: All results match CPU within 1e-8 tolerance\n"
@@ -603,6 +604,138 @@ void test_lu_solver_performance_profiling() {
     }
 }
 
+/**
+ * @brief Comprehensive performance comparison: CPU LU vs GPU cuDSS Solver
+ * Tests across multiple matrix sizes to show scaling behavior
+ * Measures both factorization and solve times separately
+ */
+void test_cpu_lu_vs_gpu_qr_performance() {
+    if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+        std::cout << "GPU not available, skipping CPU LU vs GPU cuDSS benchmark" << std::endl;
+        return;
+    }
+
+    std::cout << "\n╔═══════════════════════════════════════════════════════════════╗" << std::endl;
+    std::cout << "║    CPU LU Solver vs GPU cuDSS Solver Performance Comparison   ║" << std::endl;
+    std::cout << "╚═══════════════════════════════════════════════════════════════╝" << std::endl;
+    std::cout << "\nConfiguration:" << std::endl;
+    std::cout << "  CPU Solver: Custom sparse LU with three-phase factorization" << std::endl;
+    std::cout << "  GPU Solver: NVIDIA cuDSS (LU factorization with partial pivoting)" << std::endl;
+    std::cout << "  Matrix Type: Power system admittance (diagonal dominant, sparse)" << std::endl;
+    std::cout << "  Runs per size: 5 (averaged for stability)\n" << std::endl;
+
+    std::vector<int> test_sizes = {50, 100, 200, 300, 500, 800, 1000};
+    std::vector<Float> sparsities = {0.08, 0.06, 0.04, 0.03, 0.025, 0.02, 0.018};
+    const int num_runs = 5;
+
+    std::cout << "┌─────────┬──────────┬───────────┬─────────────────┬─────────────────┬──────────┬"
+                 "──────────────────┬──────────────────┬──────────┐"
+              << std::endl;
+    std::cout << "│  Size   │   NNZ    │ Sparsity  │ CPU Factor (ms) │ GPU Factor (ms) │ Speedup  "
+                 "│  CPU Solve (μs)  │  GPU Solve (μs)  │ Speedup  │"
+              << std::endl;
+    std::cout << "├─────────┼──────────┼───────────┼─────────────────┼─────────────────┼──────────┼"
+                 "──────────────────┼──────────────────┼──────────┤"
+              << std::endl;
+
+    for (size_t idx = 0; idx < test_sizes.size(); ++idx) {
+        int size = test_sizes[idx];
+        Float sparsity = sparsities[idx];
+
+        SparseMatrix matrix = generate_power_system_matrix(size, sparsity);
+
+        // Run multiple times and average
+        std::vector<long> cpu_factor_times, cpu_solve_times;
+        std::vector<long> gpu_factor_times, gpu_solve_times;
+
+        for (int run = 0; run < num_runs; ++run) {
+            auto [known_solution, rhs_placeholder] = generate_known_solution(size);
+            ComplexVector rhs = matrix_vector_multiply(matrix, known_solution);
+
+            // CPU timing
+            auto cpu_solver = core::BackendFactory::create_lu_solver(BackendType::CPU);
+
+            auto cpu_start = high_resolution_clock::now();
+            bool cpu_success = cpu_solver->factorize(matrix);
+            auto cpu_factor_end = high_resolution_clock::now();
+            ASSERT_TRUE(cpu_success);
+
+            ComplexVector cpu_solution = cpu_solver->solve(rhs);
+            auto cpu_solve_end = high_resolution_clock::now();
+
+            cpu_factor_times.push_back(
+                duration_cast<milliseconds>(cpu_factor_end - cpu_start).count());
+            cpu_solve_times.push_back(
+                duration_cast<microseconds>(cpu_solve_end - cpu_factor_end).count());
+
+            // GPU timing
+            auto gpu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+
+            auto gpu_start = high_resolution_clock::now();
+            bool gpu_success = gpu_solver->factorize(matrix);
+            auto gpu_factor_end = high_resolution_clock::now();
+            ASSERT_TRUE(gpu_success);
+
+            ComplexVector gpu_solution = gpu_solver->solve(rhs);
+            auto gpu_solve_end = high_resolution_clock::now();
+
+            gpu_factor_times.push_back(
+                duration_cast<milliseconds>(gpu_factor_end - gpu_start).count());
+            gpu_solve_times.push_back(
+                duration_cast<microseconds>(gpu_solve_end - gpu_factor_end).count());
+
+            // Verify correctness
+            Float max_diff = 0.0;
+            for (int i = 0; i < size; ++i) {
+                Float diff = std::abs(cpu_solution[i] - gpu_solution[i]);
+                max_diff = std::max(max_diff, diff);
+            }
+            ASSERT_TRUE(max_diff < 1e-8);
+        }
+
+        // Calculate averages
+        auto avg = [](const std::vector<long>& v) {
+            return std::accumulate(v.begin(), v.end(), 0L) / static_cast<Float>(v.size());
+        };
+
+        Float cpu_factor_avg = avg(cpu_factor_times);
+        Float cpu_solve_avg = avg(cpu_solve_times);
+        Float gpu_factor_avg = avg(gpu_factor_times);
+        Float gpu_solve_avg = avg(gpu_solve_times);
+
+        Float factor_speedup = cpu_factor_avg / std::max(gpu_factor_avg, static_cast<Float>(0.001));
+        Float solve_speedup = cpu_solve_avg / std::max(gpu_solve_avg, static_cast<Float>(0.001));
+        Float sparsity_pct = (100.0 * matrix.nnz) / (size * size);
+
+        std::cout << std::fixed << std::setprecision(1);
+        std::cout << "│ " << std::setw(7) << size << " │ " << std::setw(8) << matrix.nnz << " │ "
+                  << std::setw(8) << sparsity_pct << "% "
+                  << "│ " << std::setw(15) << cpu_factor_avg << " │ " << std::setw(15)
+                  << gpu_factor_avg << " │ " << std::setw(7) << factor_speedup << "x "
+                  << "│ " << std::setw(16) << cpu_solve_avg << " │ " << std::setw(16)
+                  << gpu_solve_avg << " │ " << std::setw(7) << solve_speedup << "x "
+                  << "│" << std::endl;
+    }
+
+    std::cout << "└─────────┴──────────┴───────────┴─────────────────┴─────────────────┴──────────┴"
+                 "──────────────────┴──────────────────┴──────────┘"
+              << std::endl;
+
+    std::cout << "\n📊 Performance Analysis:" << std::endl;
+    std::cout << "  ✓ Correctness: All GPU cuDSS results match CPU LU within 1e-8 tolerance"
+              << std::endl;
+    std::cout << "  ⚡ GPU cuDSS Advantages:" << std::endl;
+    std::cout << "     - Direct sparse LU solver optimized for GPU architecture" << std::endl;
+    std::cout << "     - Efficient symbolic analysis and numerical factorization" << std::endl;
+    std::cout << "     - Fast repeated solves with factorization reuse" << std::endl;
+    std::cout << "     - Scales well with problem size (parallelization)" << std::endl;
+    std::cout << "  🔍 CPU LU Advantages:" << std::endl;
+    std::cout << "     - No memory transfer overhead (host-only)" << std::endl;
+    std::cout << "     - More efficient for very small matrices (<100x100)" << std::endl;
+    std::cout << "  💡 Recommendation: Use GPU cuDSS for matrices >200x200 for best performance\n"
+              << std::endl;
+}
+
 void register_lu_solver_validation_tests(TestRunner& runner) {
     runner.add_test("LU Solver Small Matrix (10x10)", test_lu_solver_small_matrix);
     runner.add_test("LU Solver Medium Matrix (100x100)", test_lu_solver_medium_matrix);
@@ -612,4 +745,5 @@ void register_lu_solver_validation_tests(TestRunner& runner) {
     runner.add_test("LU Solver Scalability Analysis", test_lu_solver_scalability);
     runner.add_test("LU Solver GPU vs CPU Performance", test_lu_solver_gpu_vs_cpu_performance);
     runner.add_test("LU Solver Performance Profiling", test_lu_solver_performance_profiling);
+    runner.add_test("CPU LU vs GPU cuDSS Performance", test_cpu_lu_vs_gpu_qr_performance);
 }

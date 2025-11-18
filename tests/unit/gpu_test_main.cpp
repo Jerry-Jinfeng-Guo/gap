@@ -16,6 +16,7 @@ void test_gpu_lu_solver_functionality();
 void test_gpu_powerflow_functionality();
 void test_gpu_lu_solver_large_matrix();
 void test_gpu_lu_solver_memory_management();
+void test_gpu_vs_cpu_lu_solver_correctness();
 void test_gpu_powerflow_convergence();
 void test_gpu_powerflow_different_configs();
 
@@ -36,6 +37,7 @@ int main() {
         // GPU LU Solver tests
         test_gpu_lu_solver_large_matrix();
         test_gpu_lu_solver_memory_management();
+        test_gpu_vs_cpu_lu_solver_correctness();
 
         // GPU Power Flow tests
         test_gpu_powerflow_convergence();

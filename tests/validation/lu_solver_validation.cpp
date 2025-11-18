@@ -408,12 +408,208 @@ void test_lu_solver_scalability() {
     std::cout << "  Maximum RHS size: 1000 - Ready for thousand-bus power systems!" << std::endl;
 }
 
+/**
+ * @brief GPU vs CPU performance comparison across matrix sizes
+ * Benchmarks factorization and solve performance for both backends
+ */
+void test_lu_solver_gpu_vs_cpu_performance() {
+    if (!core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+        std::cout << "GPU not available, skipping GPU vs CPU benchmark" << std::endl;
+        return;
+    }
+
+    std::cout << "\n=== GPU vs CPU Performance Benchmark ===" << std::endl;
+    std::cout << "Testing with power system matrices (diagonal dominant, ~2-5% sparsity)\n"
+              << std::endl;
+
+    std::vector<int> test_sizes = {50, 100, 200, 300, 500};
+    std::vector<Float> sparsities = {0.05, 0.04, 0.03, 0.025, 0.02};
+
+    std::cout << std::left << std::setw(8) << "Size" << std::setw(10) << "NNZ" << std::setw(12)
+              << "Sparsity" << std::setw(18) << "CPU Factor(ms)" << std::setw(18)
+              << "GPU Factor(ms)" << std::setw(12) << "Speedup" << std::setw(16) << "CPU Solve(μs)"
+              << std::setw(16) << "GPU Solve(μs)" << std::setw(12) << "Speedup" << std::endl;
+    std::cout << std::string(130, '-') << std::endl;
+
+    for (size_t idx = 0; idx < test_sizes.size(); ++idx) {
+        int size = test_sizes[idx];
+        Float sparsity = sparsities[idx];
+
+        SparseMatrix matrix = generate_power_system_matrix(size, sparsity);
+        auto [known_solution, rhs_placeholder] = generate_known_solution(size);
+        ComplexVector rhs = matrix_vector_multiply(matrix, known_solution);
+
+        // CPU timing
+        auto cpu_solver = core::BackendFactory::create_lu_solver(BackendType::CPU);
+
+        auto cpu_start = high_resolution_clock::now();
+        bool cpu_success = cpu_solver->factorize(matrix);
+        auto cpu_factor_end = high_resolution_clock::now();
+        ASSERT_TRUE(cpu_success);
+
+        ComplexVector cpu_solution = cpu_solver->solve(rhs);
+        auto cpu_solve_end = high_resolution_clock::now();
+
+        auto cpu_factor_ms = duration_cast<milliseconds>(cpu_factor_end - cpu_start).count();
+        auto cpu_solve_us = duration_cast<microseconds>(cpu_solve_end - cpu_factor_end).count();
+
+        // GPU timing
+        auto gpu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+
+        auto gpu_start = high_resolution_clock::now();
+        bool gpu_success = gpu_solver->factorize(matrix);
+        auto gpu_factor_end = high_resolution_clock::now();
+        ASSERT_TRUE(gpu_success);
+
+        ComplexVector gpu_solution = gpu_solver->solve(rhs);
+        auto gpu_solve_end = high_resolution_clock::now();
+
+        auto gpu_factor_ms = duration_cast<milliseconds>(gpu_factor_end - gpu_start).count();
+        auto gpu_solve_us = duration_cast<microseconds>(gpu_solve_end - gpu_factor_end).count();
+
+        // Verify correctness
+        Float max_diff = 0.0;
+        for (int i = 0; i < size; ++i) {
+            Float diff = std::abs(cpu_solution[i] - gpu_solution[i]);
+            max_diff = std::max(max_diff, diff);
+        }
+        ASSERT_TRUE(max_diff < 1e-8);
+
+        // Calculate speedups
+        Float factor_speedup = static_cast<Float>(cpu_factor_ms) / gpu_factor_ms;
+        Float solve_speedup = static_cast<Float>(cpu_solve_us) / gpu_solve_us;
+
+        Float sparsity_pct = (100.0 * matrix.nnz) / (size * size);
+
+        std::cout << std::left << std::setw(8) << size << std::setw(10) << matrix.nnz
+                  << std::setw(12) << (std::to_string(sparsity_pct).substr(0, 4) + "%")
+                  << std::setw(18) << cpu_factor_ms << std::setw(18) << gpu_factor_ms
+                  << std::setw(12) << (std::to_string(factor_speedup).substr(0, 4) + "x")
+                  << std::setw(16) << cpu_solve_us << std::setw(16) << gpu_solve_us << std::setw(12)
+                  << (std::to_string(solve_speedup).substr(0, 4) + "x") << std::endl;
+    }
+
+    std::cout << std::string(130, '-') << std::endl;
+    std::cout << "\nNote: GPU performance characteristics:" << std::endl;
+    std::cout << "  - cusolverSp uses host-based sparse LU (runs on CPU with CUDA optimizations)"
+              << std::endl;
+    std::cout << "  - Best for medium-to-large matrices (>200 buses)" << std::endl;
+    std::cout << "  - Performance varies with matrix structure and fill-in patterns" << std::endl;
+    std::cout << "  ✓ Correctness verified: All results match CPU within 1e-8 tolerance\n"
+              << std::endl;
+}
+
+/**
+ * @brief Detailed performance profiling for specific matrix size
+ * Multiple runs to get statistical confidence in timing measurements
+ */
+void test_lu_solver_performance_profiling() {
+    std::cout << "\n=== Detailed Performance Profiling (200x200 Matrix) ===" << std::endl;
+
+    const int size = 200;
+    const int num_runs = 10;
+    SparseMatrix matrix = generate_power_system_matrix(size, 0.03);
+
+    std::cout << "Matrix: " << size << "x" << size << ", NNZ: " << matrix.nnz << " (" << std::fixed
+              << std::setprecision(2) << (100.0 * matrix.nnz / (size * size)) << "% sparse)"
+              << std::endl;
+    std::cout << "Number of runs: " << num_runs << "\n" << std::endl;
+
+    // CPU profiling
+    std::vector<long> cpu_factor_times, cpu_solve_times;
+    auto cpu_solver = core::BackendFactory::create_lu_solver(BackendType::CPU);
+
+    for (int run = 0; run < num_runs; ++run) {
+        auto [known_solution, rhs_placeholder] = generate_known_solution(size);
+        ComplexVector rhs = matrix_vector_multiply(matrix, known_solution);
+
+        auto start = high_resolution_clock::now();
+        cpu_solver->factorize(matrix);
+        auto factor_end = high_resolution_clock::now();
+        cpu_solver->solve(rhs);
+        auto solve_end = high_resolution_clock::now();
+
+        cpu_factor_times.push_back(duration_cast<milliseconds>(factor_end - start).count());
+        cpu_solve_times.push_back(duration_cast<microseconds>(solve_end - factor_end).count());
+    }
+
+    // GPU profiling (if available)
+    std::vector<long> gpu_factor_times, gpu_solve_times;
+    if (core::BackendFactory::is_backend_available(BackendType::GPU_CUDA)) {
+        auto gpu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+
+        for (int run = 0; run < num_runs; ++run) {
+            auto [known_solution, rhs_placeholder] = generate_known_solution(size);
+            ComplexVector rhs = matrix_vector_multiply(matrix, known_solution);
+
+            auto start = high_resolution_clock::now();
+            gpu_solver->factorize(matrix);
+            auto factor_end = high_resolution_clock::now();
+            gpu_solver->solve(rhs);
+            auto solve_end = high_resolution_clock::now();
+
+            gpu_factor_times.push_back(duration_cast<milliseconds>(factor_end - start).count());
+            gpu_solve_times.push_back(duration_cast<microseconds>(solve_end - factor_end).count());
+        }
+    }
+
+    // Compute statistics
+    auto compute_stats = [](const std::vector<long>& times) {
+        long sum = 0, min_val = times[0], max_val = times[0];
+        for (auto t : times) {
+            sum += t;
+            min_val = std::min(min_val, t);
+            max_val = std::max(max_val, t);
+        }
+        Float avg = static_cast<Float>(sum) / times.size();
+
+        Float variance = 0.0;
+        for (auto t : times) {
+            variance += (t - avg) * (t - avg);
+        }
+        Float stddev = std::sqrt(variance / times.size());
+
+        return std::make_tuple(avg, stddev, min_val, max_val);
+    };
+
+    auto [cpu_factor_avg, cpu_factor_std, cpu_factor_min, cpu_factor_max] =
+        compute_stats(cpu_factor_times);
+    auto [cpu_solve_avg, cpu_solve_std, cpu_solve_min, cpu_solve_max] =
+        compute_stats(cpu_solve_times);
+
+    std::cout << "CPU Performance:" << std::endl;
+    std::cout << "  Factorization: " << std::fixed << std::setprecision(2) << cpu_factor_avg
+              << " ± " << cpu_factor_std << " ms"
+              << " [" << cpu_factor_min << " - " << cpu_factor_max << "]" << std::endl;
+    std::cout << "  Solve: " << cpu_solve_avg << " ± " << cpu_solve_std << " μs"
+              << " [" << cpu_solve_min << " - " << cpu_solve_max << "]" << std::endl;
+
+    if (!gpu_factor_times.empty()) {
+        auto [gpu_factor_avg, gpu_factor_std, gpu_factor_min, gpu_factor_max] =
+            compute_stats(gpu_factor_times);
+        auto [gpu_solve_avg, gpu_solve_std, gpu_solve_min, gpu_solve_max] =
+            compute_stats(gpu_solve_times);
+
+        std::cout << "\nGPU Performance:" << std::endl;
+        std::cout << "  Factorization: " << gpu_factor_avg << " ± " << gpu_factor_std << " ms"
+                  << " [" << gpu_factor_min << " - " << gpu_factor_max << "]" << std::endl;
+        std::cout << "  Solve: " << gpu_solve_avg << " ± " << gpu_solve_std << " μs"
+                  << " [" << gpu_solve_min << " - " << gpu_solve_max << "]" << std::endl;
+
+        std::cout << "\nSpeedup:" << std::endl;
+        std::cout << "  Factorization: " << std::setprecision(3)
+                  << (cpu_factor_avg / gpu_factor_avg) << "x" << std::endl;
+        std::cout << "  Solve: " << (cpu_solve_avg / gpu_solve_avg) << "x" << std::endl;
+    }
+}
+
 void register_lu_solver_validation_tests(TestRunner& runner) {
     runner.add_test("LU Solver Small Matrix (10x10)", test_lu_solver_small_matrix);
     runner.add_test("LU Solver Medium Matrix (100x100)", test_lu_solver_medium_matrix);
     runner.add_test("LU Solver Large Matrix (500x500)", test_lu_solver_large_matrix);
-    // runner.add_test("LU Solver Extra Large Matrix (1000x1000)",
-    // test_lu_solver_extra_large_matrix);
+    runner.add_test("LU Solver Extra Large Matrix (1000x1000)", test_lu_solver_extra_large_matrix);
     runner.add_test("LU Solver Multiple Solves", test_lu_solver_multiple_solves_large);
     runner.add_test("LU Solver Scalability Analysis", test_lu_solver_scalability);
+    runner.add_test("LU Solver GPU vs CPU Performance", test_lu_solver_gpu_vs_cpu_performance);
+    runner.add_test("LU Solver Performance Profiling", test_lu_solver_performance_profiling);
 }

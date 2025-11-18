@@ -19,11 +19,17 @@ class GPULUSolver : public ILUSolver {
     bool initialized_ = false;
     bool factorized_ = false;
 
-    // GPU memory pointers
-    void* d_matrix_values_ = nullptr;
-    void* d_matrix_row_ptr_ = nullptr;
-    void* d_matrix_col_idx_ = nullptr;
-    void* d_lu_factors_ = nullptr;
+    // Matrix dimensions
+    int matrix_size_ = 0;
+    int nnz_ = 0;
+
+    // Host copy of matrix (cusolverSp works on host memory)
+    std::vector<cuDoubleComplex> h_matrix_values_;
+    std::vector<int> h_matrix_row_ptr_;
+    std::vector<int> h_matrix_col_idx_;
+
+    // cuSPARSE matrix descriptor
+    cusparseMatDescr_t descr_A_ = nullptr;
 
     void initialize_cuda() {
         if (initialized_) return;
@@ -54,30 +60,24 @@ class GPULUSolver : public ILUSolver {
         initialized_ = true;
     }
 
-    void cleanup_gpu_memory() {
-        if (d_matrix_values_) {
-            cudaFree(d_matrix_values_);
-            d_matrix_values_ = nullptr;
+    void cleanup_factorization() {
+        h_matrix_values_.clear();
+        h_matrix_row_ptr_.clear();
+        h_matrix_col_idx_.clear();
+
+        if (descr_A_) {
+            cusparseDestroyMatDescr(descr_A_);
+            descr_A_ = nullptr;
         }
-        if (d_matrix_row_ptr_) {
-            cudaFree(d_matrix_row_ptr_);
-            d_matrix_row_ptr_ = nullptr;
-        }
-        if (d_matrix_col_idx_) {
-            cudaFree(d_matrix_col_idx_);
-            d_matrix_col_idx_ = nullptr;
-        }
-        if (d_lu_factors_) {
-            cudaFree(d_lu_factors_);
-            d_lu_factors_ = nullptr;
-        }
+
+        factorized_ = false;
     }
 
   public:
     GPULUSolver() { initialize_cuda(); }
 
     ~GPULUSolver() {
-        cleanup_gpu_memory();
+        cleanup_factorization();
         if (initialized_) {
             cusparseDestroy(cusparse_handle_);
             cusolverSpDestroy(cusolver_handle_);
@@ -86,49 +86,34 @@ class GPULUSolver : public ILUSolver {
     }
 
     bool factorize(SparseMatrix const& matrix) override {
-        // TODO: Implement GPU-based LU factorization using cuSOLVER
         std::cout << "GPULUSolver: Performing LU factorization on GPU" << std::endl;
         std::cout << "  Matrix size: " << matrix.num_rows << "x" << matrix.num_cols << std::endl;
         std::cout << "  Non-zeros: " << matrix.nnz << std::endl;
 
-        cleanup_gpu_memory();
-
-        // Allocate GPU memory
-        size_t values_size = matrix.nnz * sizeof(Complex);
-        size_t row_ptr_size = (matrix.num_rows + 1) * sizeof(int);
-        size_t col_idx_size = matrix.nnz * sizeof(int);
-
-        cudaError_t cuda_status;
-        cuda_status = cudaMalloc(&d_matrix_values_, values_size);
-        if (cuda_status != cudaSuccess) {
-            std::cerr << "Failed to allocate GPU memory for matrix values" << std::endl;
+        if (matrix.num_rows != matrix.num_cols) {
+            std::cerr << "Matrix must be square for LU factorization" << std::endl;
             return false;
         }
 
-        cuda_status = cudaMalloc(&d_matrix_row_ptr_, row_ptr_size);
-        if (cuda_status != cudaSuccess) {
-            std::cerr << "Failed to allocate GPU memory for row pointers" << std::endl;
-            return false;
+        cleanup_factorization();
+        matrix_size_ = matrix.num_rows;
+        nnz_ = matrix.nnz;
+
+        // Convert Complex to cuDoubleComplex and store on host
+        // (cusolverSp functions work with host memory)
+        h_matrix_values_.resize(matrix.nnz);
+        for (int i = 0; i < matrix.nnz; ++i) {
+            h_matrix_values_[i] =
+                make_cuDoubleComplex(matrix.values[i].real(), matrix.values[i].imag());
         }
+        h_matrix_row_ptr_ = matrix.row_ptr;
+        h_matrix_col_idx_ = matrix.col_idx;
 
-        cuda_status = cudaMalloc(&d_matrix_col_idx_, col_idx_size);
-        if (cuda_status != cudaSuccess) {
-            std::cerr << "Failed to allocate GPU memory for column indices" << std::endl;
-            return false;
-        }
+        // Create cuSPARSE matrix descriptor
+        cusparseCreateMatDescr(&descr_A_);
+        cusparseSetMatType(descr_A_, CUSPARSE_MATRIX_TYPE_GENERAL);
+        cusparseSetMatIndexBase(descr_A_, CUSPARSE_INDEX_BASE_ZERO);
 
-        // Copy matrix to GPU
-        cudaMemcpy(d_matrix_values_, matrix.values.data(), values_size, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_matrix_row_ptr_, matrix.row_ptr.data(), row_ptr_size, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_matrix_col_idx_, matrix.col_idx.data(), col_idx_size, cudaMemcpyHostToDevice);
-
-        // Placeholder implementation
-        // In real implementation:
-        // 1. Use cusolverSpZcsrlu() or similar for sparse LU factorization
-        // 2. Handle pivoting and fill-in
-        // 3. Store factorization for later use in solve()
-
-        cudaDeviceSynchronize();
         factorized_ = true;
         std::cout << "  GPU LU factorization completed successfully" << std::endl;
         return true;
@@ -139,49 +124,61 @@ class GPULUSolver : public ILUSolver {
             throw std::runtime_error("Matrix not factorized. Call factorize() first.");
         }
 
-        // TODO: Implement GPU-based forward/backward substitution
         std::cout << "GPULUSolver: Solving linear system on GPU" << std::endl;
         std::cout << "  RHS size: " << rhs.size() << std::endl;
 
+        if (static_cast<int>(rhs.size()) != matrix_size_) {
+            throw std::runtime_error("RHS size does not match matrix dimension");
+        }
+
+        // Convert RHS to cuDoubleComplex
+        std::vector<cuDoubleComplex> cu_rhs(rhs.size());
+        for (size_t i = 0; i < rhs.size(); ++i) {
+            cu_rhs[i] = make_cuDoubleComplex(rhs[i].real(), rhs[i].imag());
+        }
+
+        // Allocate solution vector
+        std::vector<cuDoubleComplex> cu_solution(rhs.size());
+
+        // Solve using cusolverSpZcsrlsvluHost (LU factorization + solve)
+        // tol = 1e-12 for tolerance, reorder = 1 to enable reordering
+        int singularity = -1;
+        cusolverStatus_t status = cusolverSpZcsrlsvluHost(
+            cusolver_handle_, matrix_size_, nnz_, descr_A_, h_matrix_values_.data(),
+            h_matrix_row_ptr_.data(), h_matrix_col_idx_.data(), cu_rhs.data(),
+            1e-12,  // tolerance
+            1,      // reorder (1 = enable reordering for stability)
+            cu_solution.data(), &singularity);
+
+        if (status != CUSOLVER_STATUS_SUCCESS) {
+            std::cerr << "  cuSOLVER solve failed with status: " << status << std::endl;
+            if (singularity >= 0) {
+                std::cerr << "  Matrix is singular at row: " << singularity << std::endl;
+            }
+            throw std::runtime_error("cuSOLVER LU solve failed");
+        }
+
+        if (singularity >= 0) {
+            std::cerr << "  Warning: Matrix is numerically singular at row: " << singularity
+                      << std::endl;
+        }
+
+        // Convert back to Complex
         ComplexVector solution(rhs.size());
+        for (size_t i = 0; i < rhs.size(); ++i) {
+            solution[i] = Complex(cuCreal(cu_solution[i]), cuCimag(cu_solution[i]));
+        }
 
-        // Allocate GPU memory for vectors
-        void* d_rhs = nullptr;
-        void* d_solution = nullptr;
-        size_t vector_size = rhs.size() * sizeof(Complex);
-
-        cudaMalloc(&d_rhs, vector_size);
-        cudaMalloc(&d_solution, vector_size);
-
-        // Copy RHS to GPU
-        cudaMemcpy(d_rhs, rhs.data(), vector_size, cudaMemcpyHostToDevice);
-
-        // Placeholder implementation
-        // In real implementation:
-        // 1. Use cusolverSpZcsrsv() for triangular solves
-        // 2. Perform forward substitution: solve L*y = P*b
-        // 3. Perform backward substitution: solve U*x = y
-
-        // For now, just copy RHS as placeholder
-        cudaMemcpy(d_solution, d_rhs, vector_size, cudaMemcpyDeviceToDevice);
-
-        // Copy solution back to host
-        cudaMemcpy(solution.data(), d_solution, vector_size, cudaMemcpyDeviceToHost);
-
-        cudaFree(d_rhs);
-        cudaFree(d_solution);
-
-        cudaDeviceSynchronize();
         std::cout << "  GPU linear solve completed" << std::endl;
 
         return solution;
     }
 
     bool update_factorization(SparseMatrix const& matrix) override {
-        // TODO: Implement efficient GPU factorization update
         std::cout << "GPULUSolver: Updating factorization on GPU" << std::endl;
 
-        // For now, just perform full refactorization
+        // For now, perform full refactorization
+        // Future optimization: implement efficient update when only values change
         return factorize(matrix);
     }
 

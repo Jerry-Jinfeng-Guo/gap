@@ -426,12 +426,13 @@ __global__ void initialize_voltages_flat_start_kernel(
     if (bus_idx < num_buses) {
         int bus_type = bus_types[bus_idx];
 
-        if (bus_type == 0 || bus_type == 2) {  // SLACK or PV
-            // Use specified magnitude
+        // BusType enum: PQ=0, PV=1, SLACK=2
+        if (bus_type == 1 || bus_type == 2) {  // PV or SLACK bus
+            // Use specified magnitude (V is specified for PV and SLACK)
             double mag = specified_magnitudes[bus_idx];
             voltages[bus_idx] = make_cuDoubleComplex(mag, 0.0);
-        } else {  // PQ bus
-            // Flat start: 1.0 + 0j
+        } else {  // PQ bus (bus_type == 0)
+            // Flat start: 1.0 + 0j per-unit
             voltages[bus_idx] = make_cuDoubleComplex(1.0, 0.0);
         }
     }

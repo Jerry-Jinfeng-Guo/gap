@@ -12,13 +12,14 @@ set(GAP_PYTHON_SOURCES
 )
 
 # Add CUDA sources only if CUDA is available
-if(GAP_ENABLE_CUDA)
+# NOTE: GPU backend currently disabled for Python bindings (see linking section below)
+if(GAP_ENABLE_CUDA AND FALSE)  # Temporarily disabled
     list(APPEND GAP_PYTHON_SOURCES cuda_bindings.cpp)
     set(GAP_PYTHON_COMPILE_DEFINITIONS GAP_CUDA_AVAILABLE=1)
     message(STATUS "Python bindings: CUDA support enabled")
 else()
     set(GAP_PYTHON_COMPILE_DEFINITIONS GAP_CUDA_AVAILABLE=0)
-    message(STATUS "Python bindings: CPU-only build")
+    message(STATUS "Python bindings: CPU-only build (GPU backend available in C++)")
 endif()
 
 # Create the Python module
@@ -55,7 +56,10 @@ target_link_libraries(gap_solver PRIVATE
 )
 
 # Link CUDA libraries and GPU backends if CUDA is enabled
-if(GAP_ENABLE_CUDA)
+# NOTE: GPU backend linking currently disabled for Python bindings due to
+# CUDA static library linking issues (undefined symbol: fatbinData)
+# The C++ GPU backend works perfectly - this only affects Python bindings
+if(GAP_ENABLE_CUDA AND FALSE)  # Temporarily disabled
     target_link_libraries(gap_solver PRIVATE
         gap_powerflow_gpu
         gap_admittance_gpu

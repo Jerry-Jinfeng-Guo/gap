@@ -342,6 +342,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
                 v_angle += delta_theta;
 
                 gpu_data_.h_voltages[i] = Complex(v_mag * cos(v_angle), v_mag * sin(v_angle));
+
                 corr_idx++;
             }
         }
@@ -495,6 +496,9 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
             // First, calculate power injections S = V * conj(I)
             gpu_kernels::launch_calculate_power_injections(gpu_data_.d_voltages, d_currents_,
                                                            d_powers_, num_buses_);
+
+            // Zero out the Jacobian matrix before building (important for sparse writes)
+            cudaMemset(d_jacobian_, 0, num_unknowns_ * num_unknowns_ * sizeof(double));
 
             // Build full Jacobian matrix (dense format for cuDSS)
             gpu_kernels::launch_build_jacobian_dense(

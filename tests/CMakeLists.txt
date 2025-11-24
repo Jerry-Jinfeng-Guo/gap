@@ -151,4 +151,42 @@ if(GAP_ENABLE_CUDA)
         gap_powerflow_gpu
         ${CMAKE_DL_LIBS}
     )
+
+    # Debug utility to examine Jacobian and corrections
+    add_executable(debug_jacobian
+        debug/debug_jacobian.cpp
+    )
+    
+    target_include_directories(debug_jacobian PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    
+    target_link_libraries(debug_jacobian
+        gap_core
+        gap_io
+        gap_admittance_cpu
+        gap_admittance_gpu
+        gap_powerflow_cpu
+        gap_powerflow_gpu
+        ${CMAKE_DL_LIBS}
+    )
+
+    # Debug utility to compare with PGM reference outputs
+    add_executable(compare_with_pgm
+        debug/compare_with_pgm.cpp
+    )
+    
+    target_include_directories(compare_with_pgm PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    
+    target_link_libraries(compare_with_pgm
+        gap_core
+        gap_io
+        gap_admittance_cpu
+        gap_admittance_gpu
+        gap_powerflow_cpu
+        gap_powerflow_gpu
+        ${CMAKE_DL_LIBS}
+    )
 endif()

@@ -202,6 +202,81 @@ int main(int argc, char** argv) {
         // Compare iteration states
         compare_iteration_states(cpu_states, gpu_states);
 
+        // Detailed final voltage comparison
+        if (cpu_result.converged && gpu_result.converged) {
+            std::cout << "\n========== DETAILED FINAL VOLTAGE COMPARISON ==========\n";
+            std::cout << "Both solvers converged. Comparing all bus voltages...\n\n";
+
+            const auto& cpu_final = cpu_states.back();
+            const auto& gpu_final = gpu_states.back();
+
+            std::cout << std::setw(6) << "Bus" << std::setw(18) << "CPU Mag (pu)" << std::setw(18)
+                      << "GPU Mag (pu)" << std::setw(16) << "Mag Diff" << std::setw(18)
+                      << "CPU Ang (deg)" << std::setw(18) << "GPU Ang (deg)" << std::setw(16)
+                      << "Ang Diff (deg)" << "\n";
+            std::cout << std::string(126, '-') << "\n";
+
+            double max_mag_diff = 0.0, max_ang_diff = 0.0;
+            int max_mag_bus = -1, max_ang_bus = -1;
+            bool all_match = true;
+            const double mag_tol = 1e-6;  // 0.0001%
+            const double ang_tol = 1e-4;  // 0.0057 degrees
+
+            for (size_t i = 0; i < cpu_final.voltages.size(); i++) {
+                double cpu_mag = std::abs(cpu_final.voltages[i]);
+                double gpu_mag = std::abs(gpu_final.voltages[i]);
+                double cpu_ang = std::arg(cpu_final.voltages[i]) * 180.0 / M_PI;
+                double gpu_ang = std::arg(gpu_final.voltages[i]) * 180.0 / M_PI;
+
+                double mag_diff = std::abs(cpu_mag - gpu_mag);
+                double ang_diff = std::abs(cpu_ang - gpu_ang);
+
+                if (mag_diff > max_mag_diff) {
+                    max_mag_diff = mag_diff;
+                    max_mag_bus = i;
+                }
+                if (ang_diff > max_ang_diff) {
+                    max_ang_diff = ang_diff;
+                    max_ang_bus = i;
+                }
+
+                if (mag_diff > mag_tol || ang_diff > ang_tol) {
+                    all_match = false;
+                }
+
+                std::cout << std::setw(6) << i << std::fixed << std::setprecision(10)
+                          << std::setw(18) << cpu_mag << std::setw(18) << gpu_mag << std::scientific
+                          << std::setprecision(4) << std::setw(16) << mag_diff << std::fixed
+                          << std::setprecision(8) << std::setw(18) << cpu_ang << std::setw(18)
+                          << gpu_ang << std::scientific << std::setprecision(4) << std::setw(16)
+                          << ang_diff << "\n";
+            }
+
+            std::cout << std::string(126, '-') << "\n";
+            std::cout << "Maximum magnitude difference: " << std::scientific << std::setprecision(4)
+                      << max_mag_diff << " at bus " << max_mag_bus << "\n";
+            std::cout << "Maximum angle difference:     " << std::scientific << std::setprecision(4)
+                      << max_ang_diff << " deg (" << max_ang_diff * M_PI / 180.0 << " rad) at bus "
+                      << max_ang_bus << "\n";
+
+            if (all_match) {
+                std::cout << "\n✓ ALL VOLTAGES MATCH within tolerance (mag: " << mag_tol
+                          << ", ang: " << ang_tol << " rad)\n";
+                return 0;
+            } else {
+                std::cout << "\n✗ SOME VOLTAGES DIFFER beyond tolerance\n";
+                return 1;
+            }
+        } else if (!cpu_result.converged && !gpu_result.converged) {
+            std::cout << "\n⚠ Both solvers failed to converge\n";
+            return 1;
+        } else {
+            std::cout << "\n✗ CONVERGENCE MISMATCH: CPU "
+                      << (cpu_result.converged ? "converged" : "diverged") << ", GPU "
+                      << (gpu_result.converged ? "converged" : "diverged") << "\n";
+            return 1;
+        }
+
         return 0;
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

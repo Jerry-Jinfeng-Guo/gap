@@ -95,6 +95,12 @@ class GPUCuDSSSolver : public ILUSolver {
                                      std::to_string(status));
         }
 
+        // Enable pivoting for numerical stability
+        int reorder_alg = 1;  // 1 = NSTDIS (Nested Dissection)
+        status =
+            cudssConfigSet(config_, CUDSS_CONFIG_REORDERING_ALG, &reorder_alg, sizeof(reorder_alg));
+        // Ignore errors for now
+
         // Create solver data
         status = cudssDataCreate(handle_, &data_);
         if (status != CUDSS_STATUS_SUCCESS) {

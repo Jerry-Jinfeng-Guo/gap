@@ -15,6 +15,10 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     std::shared_ptr<ILUSolver> lu_solver_;
     gap::logging::Logger& logger = gap::logging::global_logger;
 
+    // State capture for debugging
+    bool capture_states_ = false;
+    std::vector<IterationState> iteration_states_;
+
     // Profiling data
     struct ProfilingData {
         double total_mismatch_time = 0.0;
@@ -87,6 +91,11 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         ProfilingData profiling;
         auto total_start = std::chrono::high_resolution_clock::now();
 
+        // Clear previous iteration states if capturing
+        if (capture_states_) {
+            iteration_states_.clear();
+        }
+
         // Newton-Raphson iterations
         for (int iter = 0; iter < config.max_iterations; ++iter) {
             if (config.verbose) {
@@ -111,6 +120,34 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             }
 
             result.final_mismatch = max_mismatch;
+
+            // Capture iteration state if enabled
+            if (capture_states_) {
+                IterationState state;
+                state.iteration = iter;
+                state.max_mismatch = max_mismatch;
+                state.voltages = result.bus_voltages;
+                state.mismatches = mismatches;
+
+                // Calculate currents: I = Y * V
+                std::vector<Complex> currents(network_data.num_buses, Complex(0.0, 0.0));
+                for (int i = 0; i < network_data.num_buses; ++i) {
+                    for (int j_idx = y_pu.row_ptr[i]; j_idx < y_pu.row_ptr[i + 1]; ++j_idx) {
+                        int j = y_pu.col_idx[j_idx];
+                        currents[i] += y_pu.values[j_idx] * result.bus_voltages[j];
+                    }
+                }
+                state.currents = currents;
+
+                // Calculate power injections: S = V * conj(I)
+                std::vector<Complex> powers(network_data.num_buses);
+                for (int i = 0; i < network_data.num_buses; ++i) {
+                    powers[i] = result.bus_voltages[i] * std::conj(currents[i]);
+                }
+                state.power_injections = powers;
+
+                iteration_states_.push_back(state);
+            }
 
             if (max_mismatch < config.tolerance) {
                 result.converged = true;
@@ -728,6 +765,15 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     }
 
     BackendType get_backend_type() const noexcept override { return BackendType::CPU; }
+
+    // State capture interface
+    void enable_state_capture(bool enable) override { capture_states_ = enable; }
+
+    const std::vector<IterationState>& get_iteration_states() const override {
+        return iteration_states_;
+    }
+
+    void clear_iteration_states() override { iteration_states_.clear(); }
 };
 
 }  // namespace gap::solver

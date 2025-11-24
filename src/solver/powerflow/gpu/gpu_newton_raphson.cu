@@ -21,6 +21,10 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
     cublasHandle_t cublas_handle_;
     bool initialized_ = false;
 
+    // State capture for debugging
+    bool capture_states_ = false;
+    std::vector<IterationState> iteration_states_;
+
     // GPU-resident data (persistent across iterations)
     GPUSparseMatrix gpu_admittance_;
     GPUPowerFlowData gpu_data_;
@@ -99,10 +103,12 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         // === PER-UNIT SYSTEM NORMALIZATION ===
         // Calculate base impedance: Z_base = V_base² / S_base
-        Float v_base = network_data.buses[0].u_rated;                  // Base voltage in Volts
-        Float base_impedance = (v_base * v_base) / config.base_power;  // Ohms
+        Float v_base = network_data.buses[0].u_rated;               // Base voltage in Volts
+        Float inv_base_power = 1.0 / config.base_power;             // 1/VA (avoid division)
+        Float base_impedance = (v_base * v_base) * inv_base_power;  // Ohms
 
-        LOG_INFO(logger, "  Base voltage:", v_base / 1e3, "kV");
+        LOG_INFO(logger, "  Base voltage:", v_base * 1e-3,
+                 "kV");  // multiply by 1e-3 instead of divide by 1e3
         LOG_INFO(logger, "  Base impedance:", base_impedance, "Ohms");
         LOG_INFO(logger, "  Base power:", config.base_power / 1e6, "MVA");
 
@@ -237,15 +243,12 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         // Aggregate power from buses and appliances and convert to per-unit
         std::vector<cuDoubleComplex> h_power_inj(num_buses_, make_cuDoubleComplex(0.0, 0.0));
 
-        // Use base power from config (default 100 MVA = 100e6 VA)
-        double base_power = config.base_power;
-
         // First, power specified directly on buses
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
             const auto& bus = network_data.buses[i];
-            // Normalize to per-unit
-            h_power_inj[i] = make_cuDoubleComplex(bus.active_power / base_power,
-                                                  bus.reactive_power / base_power);
+            // Normalize to per-unit using multiplication
+            h_power_inj[i] = make_cuDoubleComplex(bus.active_power * inv_base_power,
+                                                  bus.reactive_power * inv_base_power);
         }
 
         // Add power from appliances connected to buses
@@ -256,10 +259,10 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
                 for (size_t i = 0; i < network_data.buses.size(); ++i) {
                     if (network_data.buses[i].id == appliance.node) {
                         cuDoubleComplex existing = h_power_inj[i];
-                        // Normalize appliance power to per-unit
+                        // Normalize appliance power to per-unit using multiplication
                         h_power_inj[i] = make_cuDoubleComplex(
-                            cuCreal(existing) + appliance.p_specified / base_power,
-                            cuCimag(existing) + appliance.q_specified / base_power);
+                            cuCreal(existing) + appliance.p_specified * inv_base_power,
+                            cuCimag(existing) + appliance.q_specified * inv_base_power);
                         break;
                     }
                 }
@@ -395,6 +398,12 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         LOG_INFO(logger, "  Tolerance:", config.tolerance);
         LOG_INFO(logger, "  Max iterations:", config.max_iterations);
 
+        // Clear previous iteration states if capturing
+        if (capture_states_) {
+            iteration_states_.clear();
+            LOG_INFO(logger, "  State capture enabled");
+        }
+
         PowerFlowResult result;
         result.bus_voltages.resize(network_data.num_buses);
 
@@ -438,6 +447,38 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
             }
 
             result.final_mismatch = max_mismatch;
+
+            // Capture iteration state if enabled
+            if (capture_states_) {
+                IterationState state;
+                state.iteration = iter;
+                state.max_mismatch = max_mismatch;
+                state.mismatches = gpu_data_.h_mismatches;
+
+                // Copy voltages from device
+                gpu_data_.sync_voltages_from_device();
+                state.voltages = gpu_data_.h_voltages;
+
+                // Copy currents from device
+                std::vector<cuDoubleComplex> h_currents(num_buses_);
+                cudaMemcpy(h_currents.data(), d_currents_, num_buses_ * sizeof(cuDoubleComplex),
+                           cudaMemcpyDeviceToHost);
+                state.currents.resize(num_buses_);
+                for (int i = 0; i < num_buses_; ++i) {
+                    state.currents[i] = Complex(cuCreal(h_currents[i]), cuCimag(h_currents[i]));
+                }
+
+                // Copy power injections from device
+                std::vector<cuDoubleComplex> h_powers(num_buses_);
+                cudaMemcpy(h_powers.data(), gpu_data_.d_power_injections,
+                           num_buses_ * sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost);
+                state.power_injections.resize(num_buses_);
+                for (int i = 0; i < num_buses_; ++i) {
+                    state.power_injections[i] = Complex(cuCreal(h_powers[i]), cuCimag(h_powers[i]));
+                }
+
+                iteration_states_.push_back(state);
+            }
 
             if (config.verbose) {
                 LOG_INFO(logger, "  Iteration", iter + 1, "- Max mismatch:", max_mismatch);
@@ -569,6 +610,15 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
     }
 
     BackendType get_backend_type() const noexcept override { return BackendType::GPU_CUDA; }
+
+    // State capture methods for debugging
+    void enable_state_capture(bool enable) override { capture_states_ = enable; }
+
+    const std::vector<IterationState>& get_iteration_states() const override {
+        return iteration_states_;
+    }
+
+    void clear_iteration_states() override { iteration_states_.clear(); }
 };
 
 }  // namespace gap::solver

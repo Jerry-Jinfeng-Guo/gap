@@ -98,4 +98,57 @@ if(GAP_ENABLE_CUDA)
     )
 
     add_test(NAME GPUTests COMMAND gap_gpu_tests)
+    
+    # GPU state capture test
+    add_executable(gap_gpu_state_capture
+        unit/test_gpu_state_capture.cpp
+    )
+    
+    target_include_directories(gap_gpu_state_capture PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    
+    target_link_libraries(gap_gpu_state_capture
+        gap_core
+        gap_io
+        gap_admittance_gpu
+        gap_powerflow_gpu
+        ${CMAKE_DL_LIBS}
+    )
+    
+    # GPU mismatch debugger with state capture
+    add_executable(debug_gpu_mismatch
+        debug_gpu_mismatch.cpp
+    )
+    
+    target_include_directories(debug_gpu_mismatch PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    
+    target_link_libraries(debug_gpu_mismatch
+        gap_core
+        gap_io
+        gap_admittance_gpu
+        gap_powerflow_gpu
+        ${CMAKE_DL_LIBS}
+    )
+
+    # Debug utility to compare CPU vs GPU iteration states
+    add_executable(debug_state_compare
+        debug/debug_state_compare.cpp
+    )
+    
+    target_include_directories(debug_state_compare PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    
+    target_link_libraries(debug_state_compare
+        gap_core
+        gap_io
+        gap_admittance_cpu
+        gap_admittance_gpu
+        gap_powerflow_cpu
+        gap_powerflow_gpu
+        ${CMAKE_DL_LIBS}
+    )
 endif()

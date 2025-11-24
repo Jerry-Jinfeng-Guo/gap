@@ -432,8 +432,8 @@ __global__ void initialize_voltages_flat_start_kernel(
             double mag = specified_magnitudes[bus_idx];
             voltages[bus_idx] = make_cuDoubleComplex(mag, 0.0);
         } else {  // PQ bus (bus_type == 0)
-            // Flat start: 1.0 + 0j per-unit
-            voltages[bus_idx] = make_cuDoubleComplex(1.0, 0.0);
+            // Flat start: 0.98 + 0j per-unit (slightly lower for load buses, matches CPU)
+            voltages[bus_idx] = make_cuDoubleComplex(0.98, 0.0);
         }
     }
 }

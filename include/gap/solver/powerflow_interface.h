@@ -22,6 +22,18 @@ struct PowerFlowConfig {
 /**
  * @brief Power flow solution result
  */
+/**
+ * @brief Iteration state for debugging
+ */
+struct IterationState {
+    int iteration;
+    std::vector<Complex> voltages;
+    std::vector<Complex> currents;
+    std::vector<Complex> power_injections;
+    std::vector<double> mismatches;
+    double max_mismatch;
+};
+
 struct PowerFlowResult {
     bool converged = false;        // Convergence status
     int iterations = 0;            // Number of iterations
@@ -70,6 +82,29 @@ class IPowerFlowSolver {
      * @return Backend execution type
      */
     virtual BackendType get_backend_type() const noexcept = 0;
+
+    /**
+     * @brief Enable or disable iteration state capture (for debugging)
+     * @param enable True to capture states, false to disable
+     * @note Default implementation does nothing
+     */
+    virtual void enable_state_capture(bool enable) { (void)enable; }
+
+    /**
+     * @brief Get captured iteration states (for debugging)
+     * @return Reference to vector of captured states
+     * @note Default implementation returns empty vector
+     */
+    virtual std::vector<IterationState> const& get_iteration_states() const {
+        static std::vector<IterationState> empty;
+        return empty;
+    }
+
+    /**
+     * @brief Clear captured iteration states
+     * @note Default implementation does nothing
+     */
+    virtual void clear_iteration_states() {}
 };
 
 }  // namespace gap::solver

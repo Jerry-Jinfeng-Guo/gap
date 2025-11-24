@@ -82,6 +82,7 @@ if(GAP_ENABLE_CUDA)
         unit/test_gpu_lu_solver.cpp
         unit/test_gpu_powerflow.cpp
         unit/test_gpu_jacobian.cpp
+        unit/test_gpu_mismatch.cpp
     )
 
     target_include_directories(gap_gpu_tests PUBLIC
@@ -90,6 +91,7 @@ if(GAP_ENABLE_CUDA)
 
     target_link_libraries(gap_gpu_tests
         gap_core
+        gap_io
         gap_admittance_gpu
         gap_lu_gpu
         gap_powerflow_gpu

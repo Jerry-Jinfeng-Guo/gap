@@ -175,6 +175,10 @@ if __name__ == "__main__":
             100,
             100,
         ),  # radial_100feeder_100nodepf (10001 buses - extreme large case) seed 410
+        (
+            200,
+            100,
+        ),  # radial_200feeder_100nodepf (20001 buses - extreme large case) seed 444
     ]
 
     print(f"📋 Generating {len(test_configs)} test cases:")
@@ -191,7 +195,7 @@ if __name__ == "__main__":
     for n_feeder, n_nodepf in test_configs:
         test_name = f"radial_{n_feeder}feeder_{n_nodepf}nodepf"
         try:
-            if generate_radial_network_test(n_feeder, n_nodepf, seed=42):
+            if generate_radial_network_test(n_feeder, n_nodepf, seed=5000):
                 success_count += 1
             else:
                 failed_cases.append(test_name)

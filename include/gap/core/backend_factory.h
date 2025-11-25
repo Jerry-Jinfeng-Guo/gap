@@ -63,7 +63,7 @@ class BackendFactory {
      * @param library_name Name of the shared library
      * @return Handle to the loaded library
      */
-    static void* load_backend_library(const std::string& library_name);
+    static void* load_backend_library(std::string const& library_name);
 
     /**
      * @brief Check CUDA availability

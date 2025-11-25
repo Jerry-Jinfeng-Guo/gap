@@ -20,25 +20,7 @@
 using namespace gap;
 using namespace gap::solver;
 
-// Forward declare the GPU iteration state structure
-struct GPUIterationState {
-    int iteration;
-    std::vector<Complex> voltages;
-    std::vector<Complex> currents;
-    std::vector<Complex> power_injections;
-    std::vector<double> mismatches;
-    double max_mismatch;
-};
-
-// Interface extensions for state capture (these methods exist in GPU solver)
-class IStateCaptureSolver : public IPowerFlowSolver {
-  public:
-    virtual void enable_state_capture(bool enable) = 0;
-    virtual const std::vector<GPUIterationState>& get_iteration_states() const = 0;
-    virtual void clear_iteration_states() = 0;
-};
-
-void print_iteration_state(const GPUIterationState& state, int num_buses_to_print = 5) {
+void print_iteration_state(const solver::IterationState& state, int num_buses_to_print = 5) {
     std::cout << "\n=== Iteration " << state.iteration << " ===" << std::endl;
     std::cout << "Max mismatch: " << std::scientific << std::setprecision(6) << state.max_mismatch
               << std::endl;
@@ -75,10 +57,10 @@ void print_iteration_state(const GPUIterationState& state, int num_buses_to_prin
     }
 }
 
-int main(int argc, char** argv) {
+int main(int /*argc*/, char** /*argv*/) {
     auto& logger = logging::global_logger;
     logger.setComponent("GPUStateCapture");
-    logger.setLevel(logging::LogLevel::INFO);
+    logger.configure(logging::LogLevel::INFO, logging::LogOutput::CONSOLE);
 
     std::cout << "========================================" << std::endl;
     std::cout << "GPU State Capture Test" << std::endl;
@@ -127,43 +109,26 @@ int main(int argc, char** argv) {
             .reactive_power = -20e6  // 30 MW + 20 MVAr load
         });
 
-        // Add lines
-        network.lines.push_back({.id = 1,
-                                 .from_node = 1,
-                                 .to_node = 2,
-                                 .energized = 1,
-                                 .r = 0.01,
-                                 .x = 0.1,
-                                 .c = 0.0,
-                                 .i_n = 1000.0});
-        network.lines.push_back({.id = 2,
-                                 .from_node = 2,
-                                 .to_node = 3,
-                                 .energized = 1,
-                                 .r = 0.01,
-                                 .x = 0.1,
-                                 .c = 0.0,
-                                 .i_n = 1000.0});
-        network.lines.push_back({.id = 3,
-                                 .from_node = 1,
-                                 .to_node = 3,
-                                 .energized = 1,
-                                 .r = 0.01,
-                                 .x = 0.1,
-                                 .c = 0.0,
-                                 .i_n = 1000.0});
+        // Add branches
+        network.branches.push_back(
+            {.id = 1, .from_bus = 1, .from_status = 1, .to_bus = 2, .to_status = 1, .status = 1});
+        network.branches.push_back(
+            {.id = 2, .from_bus = 2, .from_status = 1, .to_bus = 3, .to_status = 1, .status = 1});
+        network.branches.push_back(
+            {.id = 3, .from_bus = 1, .from_status = 1, .to_bus = 3, .to_status = 1, .status = 1});
 
         std::cout << "Network created:" << std::endl;
         std::cout << "  Buses: " << network.num_buses << std::endl;
-        std::cout << "  Lines: " << network.lines.size() << std::endl;
+        std::cout << "  Branches: " << network.branches.size() << std::endl;
 
         // Build admittance matrix
         std::cout << "\nBuilding admittance matrix..." << std::endl;
-        AdmittanceMatrixBuilder builder;
-        auto y_matrix = builder.build_admittance_matrix(network);
+        auto gpu_admittance =
+            core::BackendFactory::create_admittance_backend(BackendType::GPU_CUDA);
+        auto y_matrix = gpu_admittance->build_admittance_matrix(network);
 
         // Configure power flow
-        PowerFlowConfig config;
+        solver::PowerFlowConfig config;
         config.tolerance = 1e-6;
         config.max_iterations = 20;
         config.acceleration_factor = 1.0;
@@ -171,27 +136,18 @@ int main(int argc, char** argv) {
         config.verbose = true;
         config.base_power = 100e6;  // 100 MVA
 
-        // Load GPU solver
-        std::cout << "\nLoading GPU solver..." << std::endl;
-        auto gpu_solver = load_solver(BackendType::GPU_CUDA);
-        if (!gpu_solver) {
-            std::cerr << "ERROR: Failed to load GPU solver" << std::endl;
-            return 1;
-        }
-
-        // Cast to state capture interface
-        auto* state_solver = dynamic_cast<IStateCaptureSolver*>(gpu_solver.get());
-        if (!state_solver) {
-            std::cerr << "ERROR: GPU solver doesn't support state capture" << std::endl;
-            return 1;
-        }
+        // Create GPU solver
+        std::cout << "\nCreating GPU solver..." << std::endl;
+        auto gpu_solver = core::BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
+        auto gpu_lu = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+        gpu_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(gpu_lu.release()));
 
         // Enable state capture
-        state_solver->enable_state_capture(true);
+        gpu_solver->enable_state_capture(true);
 
         // Solve
         std::cout << "\nSolving power flow with state capture enabled..." << std::endl;
-        auto result = gpu_solver->solve_power_flow(network, y_matrix, config);
+        auto result = gpu_solver->solve_power_flow(network, *y_matrix, config);
 
         std::cout << "\n========================================" << std::endl;
         std::cout << "Solution Result" << std::endl;
@@ -201,12 +157,12 @@ int main(int argc, char** argv) {
         std::cout << "Final mismatch: " << std::scientific << result.final_mismatch << std::endl;
 
         // Print captured states
-        const auto& states = state_solver->get_iteration_states();
+        auto const& states = gpu_solver->get_iteration_states();
         std::cout << "\n========================================" << std::endl;
         std::cout << "Captured " << states.size() << " iteration states" << std::endl;
         std::cout << "========================================" << std::endl;
 
-        for (const auto& state : states) {
+        for (auto const& state : states) {
             print_iteration_state(state);
         }
 

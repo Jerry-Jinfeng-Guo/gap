@@ -30,7 +30,7 @@ void init_io_bindings(pybind11::module& m) {
     // Convenience functions for direct file operations
     m.def(
         "load_network_from_json",
-        [](const std::string& filename) {
+        [](std::string const& filename) {
             auto io_module = core::BackendFactory::create_io_module();
             return io_module->read_network_data(filename);
         },
@@ -38,7 +38,7 @@ void init_io_bindings(pybind11::module& m) {
 
     m.def(
         "save_results_to_json",
-        [](const std::string& filename, const ComplexVector& bus_voltages, bool converged,
+        [](std::string const& filename, ComplexVector const& bus_voltages, bool converged,
            int iterations) {
             auto io_module = core::BackendFactory::create_io_module();
             io_module->write_results(filename, bus_voltages, converged, iterations);

@@ -32,7 +32,7 @@ void init_solver_bindings(pybind11::module& m) {
                        "Acceleration factor (default: 1.4)")
         .def_readwrite("verbose", &PowerFlowConfig::verbose,
                        "Enable verbose output (default: false)")
-        .def("__repr__", [](const PowerFlowConfig& c) {
+        .def("__repr__", [](PowerFlowConfig const& c) {
             return "<PowerFlowConfig tolerance=" + std::to_string(c.tolerance) +
                    " max_iter=" + std::to_string(c.max_iterations) + ">";
         });
@@ -46,7 +46,7 @@ void init_solver_bindings(pybind11::module& m) {
         .def_readwrite("final_mismatch", &PowerFlowResult::final_mismatch, "Final mismatch norm")
         .def_readwrite("bus_injections", &PowerFlowResult::bus_injections,
                        "Calculated bus injections")
-        .def("__repr__", [](const PowerFlowResult& r) {
+        .def("__repr__", [](PowerFlowResult const& r) {
             return "<PowerFlowResult converged=" + std::string(r.converged ? "True" : "False") +
                    " iterations=" + std::to_string(r.iterations) +
                    " buses=" + std::to_string(r.bus_voltages.size()) + ">";
@@ -55,8 +55,8 @@ void init_solver_bindings(pybind11::module& m) {
     // Ultra-minimal API using only basic Python types (lists and numbers)
     m.def(
         "solve_simple_power_flow",
-        [](const std::vector<std::vector<double>>& bus_data,
-           const std::vector<std::vector<double>>& branch_data, double tolerance = 1e-6,
+        [](std::vector<std::vector<double>> const& bus_data,
+           std::vector<std::vector<double>> const& branch_data, double tolerance = 1e-6,
            int max_iterations = 50, bool verbose = false, double base_power = 100e6,
            std::string backend = "cpu") -> std::vector<std::vector<double>> {
             try {
@@ -161,7 +161,7 @@ void init_solver_bindings(pybind11::module& m) {
 
                 // Convert result to basic Python types
                 std::vector<std::vector<double>> output;
-                for (const auto& voltage : result.bus_voltages) {
+                for (auto const& voltage : result.bus_voltages) {
                     output.push_back(
                         {voltage.real(), voltage.imag(), std::abs(voltage), std::arg(voltage)});
                 }
@@ -175,7 +175,7 @@ void init_solver_bindings(pybind11::module& m) {
 
                 return output;
 
-            } catch (const std::exception& e) {
+            } catch (std const ::exception& e) {
                 throw std::runtime_error(std::string("Simple power flow solution failed: ") +
                                          e.what());
             }

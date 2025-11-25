@@ -265,7 +265,7 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
         int min_bus_id = std::numeric_limits<int>::max();
         int max_bus_id = -1;
 
-        for (const auto& bus : network_data.buses) {
+        for (auto const& bus : network_data.buses) {
             min_bus_id = std::min(min_bus_id, bus.id);
             max_bus_id = std::max(max_bus_id, bus.id);
         }
@@ -377,7 +377,7 @@ class GPUAdmittanceMatrix : public IAdmittanceMatrix {
         int current_row = 0;
         matrix->row_ptr.push_back(0);
 
-        for (const auto& triplet : h_triplets) {
+        for (auto const& triplet : h_triplets) {
             // Skip invalid entries (from inactive branches)
             if (triplet.row < 0 || triplet.col < 0) continue;
 

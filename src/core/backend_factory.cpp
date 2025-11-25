@@ -122,7 +122,7 @@ std::vector<BackendType> BackendFactory::get_available_backends() {
     return backends;
 }
 
-void* BackendFactory::load_backend_library(const std::string& library_name) {
+void* BackendFactory::load_backend_library(std::string const& library_name) {
     void* handle = dlopen(library_name.c_str(), RTLD_LAZY);
     if (!handle) {
         std::cerr << "Cannot load library " << library_name << ": " << dlerror() << std::endl;

@@ -24,7 +24,7 @@ struct PGMNodeResult {
     double u_angle;  // radians
 };
 
-std::vector<PGMNodeResult> load_pgm_results(const std::string& output_path) {
+std::vector<PGMNodeResult> load_pgm_results(std::string const& output_path) {
     std::vector<PGMNodeResult> results;
     std::ifstream file(output_path);
     if (!file.is_open()) {
@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
         const double MAG_TOLERANCE = 5e-6;      // 5 micro-pu
         const double ANGLE_TOLERANCE = 0.0001;  // ~0.0057 degrees
 
-        for (const auto& pgm : pgm_results) {
+        for (auto const& pgm : pgm_results) {
             if (pgm.id >= static_cast<int>(cpu_result.bus_voltages.size())) continue;
 
             double cpu_mag = std::abs(cpu_result.bus_voltages[pgm.id]);

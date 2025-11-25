@@ -119,7 +119,7 @@ std::pair<ComplexVector, ComplexVector> generate_known_solution(int size) {
 /**
  * @brief Compute matrix-vector product: result = A * x
  */
-ComplexVector matrix_vector_multiply(const SparseMatrix& matrix, const ComplexVector& vector) {
+ComplexVector matrix_vector_multiply(const SparseMatrix& matrix, ComplexVector const& vector) {
     ComplexVector result(matrix.num_rows, Complex(0.0, 0.0));
 
     for (int row = 0; row < matrix.num_rows; ++row) {
@@ -135,8 +135,8 @@ ComplexVector matrix_vector_multiply(const SparseMatrix& matrix, const ComplexVe
 /**
  * @brief Compute residual norm: ||Ax - b||
  */
-Float compute_residual_norm(const SparseMatrix& matrix, const ComplexVector& solution,
-                            const ComplexVector& rhs) {
+Float compute_residual_norm(const SparseMatrix& matrix, ComplexVector const& solution,
+                            ComplexVector const& rhs) {
     ComplexVector residual = matrix_vector_multiply(matrix, solution);
 
     Float norm_squared = 0.0;
@@ -162,7 +162,7 @@ struct ValidationCriteria {
  * @brief Generic matrix validation function with configurable parameters
  */
 void validate_lu_solver_matrix(int size, Float sparsity_ratio, const ValidationCriteria& criteria,
-                               const std::string& test_name) {
+                               std::string const& test_name) {
     std::cout << "Running " << test_name << " (" << size << "x" << size << ")..." << std::endl;
 
     SparseMatrix matrix = generate_power_system_matrix(size, sparsity_ratio);

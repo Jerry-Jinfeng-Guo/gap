@@ -37,7 +37,7 @@ class LogConfig {
     /**
      * @brief Configure logging for production (minimal file logging)
      */
-    static void forProduction(const std::string& logfile = "gap.log") {
+    static void forProduction(std::string const& logfile = "gap.log") {
         auto& logger = Logger::getInstance();
         logger.configure(LogLevel::WARN, LogOutput::FILE, logfile);
     }

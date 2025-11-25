@@ -12,7 +12,7 @@ using namespace gap::core;
 using namespace gap::solver;
 
 // Helper function to find data files
-std::string find_data_file(const std::string& relative_path) {
+std::string find_data_file(std::string const& relative_path) {
     std::string cwd = std::filesystem::current_path().string();
     std::vector<std::string> candidates = {relative_path, "../" + relative_path,
                                            "../../" + relative_path};

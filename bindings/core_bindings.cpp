@@ -49,7 +49,7 @@ void init_core_types(pybind11::module& m) {
         .def_readwrite("u_angle", &BusData::u_angle, "Voltage angle (rad)")
         .def_readwrite("active_power", &BusData::active_power, "Active power injection (W)")
         .def_readwrite("reactive_power", &BusData::reactive_power, "Reactive power injection (VAr)")
-        .def("__repr__", [](const BusData& b) {
+        .def("__repr__", [](BusData const& b) {
             return "<BusData id=" + std::to_string(b.id) + " u_rated=" + std::to_string(b.u_rated) +
                    "V>";
         });
@@ -72,7 +72,7 @@ void init_core_types(pybind11::module& m) {
         .def("set_from_pgm_capacitive_params", &BranchData::set_from_pgm_capacitive_params,
              "Set admittance from PGM capacitive parameters", py::arg("c1"), py::arg("tan1"),
              py::arg("frequency") = 50.0)
-        .def("__repr__", [](const BranchData& b) {
+        .def("__repr__", [](BranchData const& b) {
             return "<BranchData id=" + std::to_string(b.id) + " " + std::to_string(b.from_bus) +
                    "->" + std::to_string(b.to_bus) + ">";
         });
@@ -91,7 +91,7 @@ void init_core_types(pybind11::module& m) {
         .def_readwrite("q_specified", &ApplianceData::q_specified, "Specified reactive power (VAr)")
         .def_readwrite("g1", &ApplianceData::g1, "Positive-sequence conductance (S)")
         .def_readwrite("b1", &ApplianceData::b1, "Positive-sequence susceptance (S)")
-        .def("__repr__", [](const ApplianceData& a) {
+        .def("__repr__", [](ApplianceData const& a) {
             return "<ApplianceData id=" + std::to_string(a.id) + " node=" + std::to_string(a.node) +
                    ">";
         });
@@ -109,7 +109,7 @@ void init_core_types(pybind11::module& m) {
         .def_readwrite("is_batch", &NetworkData::is_batch, "Batch calculation flag")
         .def("validate_pgm_compliance", &NetworkData::validate_pgm_compliance,
              "Validate PGM compliance and component consistency")
-        .def("__repr__", [](const NetworkData& n) {
+        .def("__repr__", [](NetworkData const& n) {
             return "<NetworkData buses=" + std::to_string(n.num_buses) +
                    " branches=" + std::to_string(n.num_branches) +
                    " appliances=" + std::to_string(n.num_appliances) + ">";

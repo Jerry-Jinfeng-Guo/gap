@@ -148,7 +148,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         // First pass: count angle variables
         int num_angles = 0;
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
-            const auto& bus = network_data.buses[i];
+            auto const& bus = network_data.buses[i];
             if (bus.bus_type != BusType::SLACK) {
                 num_angles++;  // All non-slack buses have angle unknowns
             }
@@ -156,7 +156,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         // Second pass: assign variable indices
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
-            const auto& bus = network_data.buses[i];
+            auto const& bus = network_data.buses[i];
             int bus_type_val = static_cast<int>(bus.bus_type);
             h_bus_types[i] = bus_type_val;
             h_magnitudes[i] = bus.u_pu;
@@ -245,14 +245,14 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         // First, power specified directly on buses
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
-            const auto& bus = network_data.buses[i];
+            auto const& bus = network_data.buses[i];
             // Normalize to per-unit using multiplication
             h_power_inj[i] = make_cuDoubleComplex(bus.active_power * inv_base_power,
                                                   bus.reactive_power * inv_base_power);
         }
 
         // Add power from appliances connected to buses
-        for (const auto& appliance : network_data.appliances) {
+        for (auto const& appliance : network_data.appliances) {
             if (appliance.status == 1 && (appliance.type == ApplianceType::SOURCE ||
                                           appliance.type == ApplianceType::LOADGEN)) {
                 // Find bus index for this appliance

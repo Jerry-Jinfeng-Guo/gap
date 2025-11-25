@@ -16,7 +16,7 @@
 using namespace gap;
 
 // Helper function to find the correct path to test data files
-std::string find_data_file(const std::string& relative_path) {
+std::string find_data_file(std::string const& relative_path) {
     // Get current working directory for path resolution
     std::string cwd = std::filesystem::current_path().string();
 

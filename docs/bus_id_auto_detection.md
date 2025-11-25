@@ -55,7 +55,7 @@ The auto-detection is implemented in `src/admittance/cpu/cpu_admittance_matrix.c
    ```cpp
    int min_bus_id = network_data.num_buses;
    int max_bus_id = -1;
-   for (const auto& bus : network_data.buses) {
+   for (auto const& bus : network_data.buses) {
        min_bus_id = std::min(min_bus_id, bus.id);
        max_bus_id = std::max(max_bus_id, bus.id);
    }

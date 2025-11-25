@@ -336,12 +336,12 @@ struct NetworkData {
      */
     bool validate_pgm_compliance() const {
         // Check all buses have positive rated voltage
-        for (const auto& bus : buses) {
+        for (auto const& bus : buses) {
             if (bus.u_rated <= 0.0) return false;
         }
 
         // Check all branches have valid electrical parameters
-        for (const auto& branch : branches) {
+        for (auto const& branch : branches) {
             if (branch.r1 < 0.0 || branch.x1 == 0.0) return false;  // x1 must be non-zero
             if (branch.i_n <= 0.0) return false;  // Rated current must be positive
         }

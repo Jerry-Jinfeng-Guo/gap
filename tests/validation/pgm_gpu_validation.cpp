@@ -33,7 +33,7 @@ struct ExpectedNodeResult {
     Float u_angle;  // in radians
 };
 
-std::vector<ExpectedNodeResult> load_expected_results(const std::string& output_path) {
+std::vector<ExpectedNodeResult> load_expected_results(std::string const& output_path) {
     std::vector<ExpectedNodeResult> results;
 
     std::ifstream file(output_path);
@@ -104,7 +104,7 @@ std::vector<ExpectedNodeResult> load_expected_results(const std::string& output_
 /**
  * @brief Test a single PGM case with both CPU and GPU backends
  */
-bool test_pgm_case_with_gpu(const std::string& test_name, const std::string& input_path) {
+bool test_pgm_case_with_gpu(std::string const& test_name, std::string const& input_path) {
     std::cout << "\n  Testing: " << test_name << std::endl;
 
     // Load expected results
@@ -503,7 +503,7 @@ void test_pgm_gpu_all_cases() {
     std::vector<std::string> test_cases;
 
     // Collect all test case directories
-    for (const auto& entry : fs::directory_iterator(test_data_dir)) {
+    for (auto const& entry : fs::directory_iterator(test_data_dir)) {
         if (entry.is_directory()) {
             test_cases.push_back(entry.path().filename().string());
         }
@@ -519,7 +519,7 @@ void test_pgm_gpu_all_cases() {
     int skipped = 0;
     std::vector<std::string> failed_cases;
 
-    for (const auto& test_case : test_cases) {
+    for (auto const& test_case : test_cases) {
         std::string case_dir = test_data_dir + "/" + test_case;
         std::string input_path = case_dir + "/input.json";
 
@@ -546,7 +546,7 @@ void test_pgm_gpu_all_cases() {
 
     if (!failed_cases.empty()) {
         std::cout << "\nFailed test cases:" << std::endl;
-        for (const auto& case_name : failed_cases) {
+        for (auto const& case_name : failed_cases) {
             std::cout << "  - " << case_name << std::endl;
         }
     }
@@ -575,7 +575,7 @@ void test_pgm_gpu_smoke_test() {
     int passed = 0;
     int failed = 0;
 
-    for (const auto& test_case : smoke_test_cases) {
+    for (auto const& test_case : smoke_test_cases) {
         std::string case_dir = test_data_dir + "/" + test_case;
         std::string input_path = case_dir + "/input.json";
 

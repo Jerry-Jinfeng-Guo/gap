@@ -22,10 +22,9 @@
 using namespace gap;
 using namespace gap::solver;
 
-void print_comparison(const std::string& label, double cpu_val, double gpu_val,
-                      bool is_complex = false) {
+void print_comparison(std::string const& label, double cpu_val, double gpu_val,
+                      bool /*is_complex*/ = false) {
     double abs_diff = std::abs(cpu_val - gpu_val);
-    double rel_diff = (std::abs(cpu_val) > 1e-12) ? abs_diff / std::abs(cpu_val) : 0.0;
 
     std::cout << std::setw(30) << std::left << label << ": " << std::scientific
               << std::setprecision(6) << "CPU=" << std::setw(13) << cpu_val
@@ -37,7 +36,7 @@ void print_comparison(const std::string& label, double cpu_val, double gpu_val,
     std::cout << std::endl;
 }
 
-void compare_iteration_states(const IterationState& cpu_state, const IterationState& gpu_state) {
+void compare_iteration_states(IterationState const& cpu_state, IterationState const& gpu_state) {
     std::cout << "\n========================================" << std::endl;
     std::cout << "Iteration " << cpu_state.iteration << " Comparison" << std::endl;
     std::cout << "========================================" << std::endl;
@@ -171,14 +170,14 @@ int main(int argc, char** argv) {
         // ============================================================
         // Compare captured states
         // ============================================================
-        const auto& cpu_states = cpu_solver->get_iteration_states();
-        const auto& gpu_states = gpu_solver->get_iteration_states();
+        auto const& cpu_states = cpu_solver->get_iteration_states();
+        auto const& gpu_states = gpu_solver->get_iteration_states();
 
         if (cpu_states.empty()) {
             std::cout << "\nWARNING: CPU solver has no states captured" << std::endl;
             std::cout << "Only showing GPU states:" << std::endl;
 
-            for (const auto& state : gpu_states) {
+            for (auto const& state : gpu_states) {
                 std::cout << "\n=== GPU Iteration " << state.iteration << " ===" << std::endl;
                 std::cout << "Max mismatch: " << std::scientific << state.max_mismatch << std::endl;
 
@@ -211,7 +210,7 @@ int main(int argc, char** argv) {
 
         return 0;
 
-    } catch (const std::exception& e) {
+    } catch (std::exception const& e) {
         std::cerr << "ERROR: " << e.what() << std::endl;
         return 1;
     }

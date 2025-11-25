@@ -34,8 +34,8 @@ void compare_iteration_states(const std::vector<solver::IterationState>& cpu_sta
     size_t min_iter = std::min(cpu_states.size(), gpu_states.size());
 
     for (size_t i = 0; i < min_iter; i++) {
-        const auto& cpu = cpu_states[i];
-        const auto& gpu = gpu_states[i];
+        auto const& cpu = cpu_states[i];
+        auto const& gpu = gpu_states[i];
 
         std::cout << "---------- Iteration " << cpu.iteration << " ----------\n";
         std::cout << "CPU max_mismatch: " << std::scientific << std::setprecision(6)
@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
         cpu_solver->enable_state_capture(true);
 
         auto cpu_result = cpu_solver->solve_power_flow(network, *cpu_matrix, config);
-        const auto& cpu_states = cpu_solver->get_iteration_states();
+        auto const& cpu_states = cpu_solver->get_iteration_states();
 
         std::cout << "CPU Result: " << (cpu_result.converged ? "CONVERGED" : "DIVERGED") << "\n";
         std::cout << "Iterations: " << cpu_result.iterations << "\n";
@@ -192,7 +192,7 @@ int main(int argc, char** argv) {
         gpu_solver->enable_state_capture(true);
 
         auto gpu_result = gpu_solver->solve_power_flow(network, *gpu_matrix, config);
-        const auto& gpu_states = gpu_solver->get_iteration_states();
+        auto const& gpu_states = gpu_solver->get_iteration_states();
 
         std::cout << "GPU Result: " << (gpu_result.converged ? "CONVERGED" : "DIVERGED") << "\n";
         std::cout << "Iterations: " << gpu_result.iterations << "\n";
@@ -207,8 +207,8 @@ int main(int argc, char** argv) {
             std::cout << "\n========== DETAILED FINAL VOLTAGE COMPARISON ==========\n";
             std::cout << "Both solvers converged. Comparing all bus voltages...\n\n";
 
-            const auto& cpu_final = cpu_states.back();
-            const auto& gpu_final = gpu_states.back();
+            auto const& cpu_final = cpu_states.back();
+            auto const& gpu_final = gpu_states.back();
 
             std::cout << std::setw(6) << "Bus" << std::setw(18) << "CPU Mag (pu)" << std::setw(18)
                       << "GPU Mag (pu)" << std::setw(16) << "Mag Diff" << std::setw(18)

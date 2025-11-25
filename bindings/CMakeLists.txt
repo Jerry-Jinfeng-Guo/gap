@@ -13,12 +13,11 @@ set(GAP_PYTHON_SOURCES
 
 # Add CUDA sources only if CUDA is available
 # NOTE: GPU backend currently disabled for Python bindings (see linking section below)
+# GAP_CUDA_AVAILABLE is already defined globally in main CMakeLists.txt
 if(GAP_ENABLE_CUDA AND FALSE)  # Temporarily disabled
     list(APPEND GAP_PYTHON_SOURCES cuda_bindings.cpp)
-    set(GAP_PYTHON_COMPILE_DEFINITIONS GAP_CUDA_AVAILABLE=1)
     message(STATUS "Python bindings: CUDA support enabled")
 else()
-    set(GAP_PYTHON_COMPILE_DEFINITIONS GAP_CUDA_AVAILABLE=0)
     message(STATUS "Python bindings: CPU-only build (GPU backend available in C++)")
 endif()
 
@@ -42,7 +41,6 @@ target_include_directories(gap_solver PRIVATE
 
 # Compile definitions
 target_compile_definitions(gap_solver PRIVATE 
-    ${GAP_PYTHON_COMPILE_DEFINITIONS}
     VERSION_INFO="${PROJECT_VERSION}"
 )
 

@@ -74,11 +74,11 @@ class JsonValue {
         arr_value_ = std::move(arr);
     }
 
-    bool contains(const std::string& key) const {
+    bool contains(std::string const& key) const {
         return type_ == OBJECT && obj_value_.find(key) != obj_value_.end();
     }
 
-    const JsonValue& operator[](const std::string& key) const {
+    const JsonValue& operator[](std::string const& key) const {
         if (type_ != OBJECT) throw std::runtime_error("Not an object");
         auto it = obj_value_.find(key);
         if (it == obj_value_.end()) throw std::runtime_error("Key not found: " + key);
@@ -101,7 +101,7 @@ class JsonValue {
 /**
  * @brief Simple JSON parser for PGM format
  */
-JsonValue parseJson(const std::string& content);
+JsonValue parseJson(std::string const& content);
 
 }  // anonymous namespace
 
@@ -386,7 +386,7 @@ class JsonIOModule : public IIOModule {
     gap::logging::Logger& logger = gap::logging::global_logger;
 
   public:
-    NetworkData read_network_data(const std::string& filename) override {
+    NetworkData read_network_data(std::string const& filename) override {
         logger.setComponent("JsonIOModule");
         LOG_INFO(logger, "Reading PGM network data from", filename);
 
@@ -504,7 +504,7 @@ class JsonIOModule : public IIOModule {
         return network;
     }
 
-    void write_results(const std::string& filename, const ComplexVector& bus_voltages,
+    void write_results(std::string const& filename, ComplexVector const& bus_voltages,
                        bool converged, int iterations) override {
         // TODO: Implement JSON output for results
         LOG_INFO(logger, "Writing results to", filename);
@@ -516,7 +516,7 @@ class JsonIOModule : public IIOModule {
         // In real implementation, format and write JSON output
     }
 
-    bool validate_input_format(const std::string& filename) override {
+    bool validate_input_format(std::string const& filename) override {
         // TODO: Implement JSON format validation
         LOG_INFO(logger, "Validating format of", filename);
 
@@ -537,13 +537,13 @@ class JsonIOModule : public IIOModule {
 // Simple JSON parser implementation
 namespace {
 
-void skipWhitespace(const std::string& str, size_t& pos) {
+void skipWhitespace(std::string const& str, size_t& pos) {
     while (pos < str.length() && std::isspace(str[pos])) {
         ++pos;
     }
 }
 
-std::string parseString(const std::string& str, size_t& pos) {
+std::string parseString(std::string const& str, size_t& pos) {
     if (str[pos] != '"') {
         throw std::runtime_error("Expected '\"' at position " + std::to_string(pos));
     }
@@ -594,7 +594,7 @@ std::string parseString(const std::string& str, size_t& pos) {
     return result;
 }
 
-Float parseNumber(const std::string& str, size_t& pos) {
+Float parseNumber(std::string const& str, size_t& pos) {
     size_t start = pos;
 
     // Handle optional negative sign
@@ -634,9 +634,9 @@ Float parseNumber(const std::string& str, size_t& pos) {
     return static_cast<Float>(std::stod(numStr));
 }
 
-JsonValue parseValue(const std::string& str, size_t& pos);
+JsonValue parseValue(std::string const& str, size_t& pos);
 
-JsonValue parseArray(const std::string& str, size_t& pos) {
+JsonValue parseArray(std::string const& str, size_t& pos) {
     JsonValue result;
     std::vector<JsonValue> arr;
 
@@ -676,7 +676,7 @@ JsonValue parseArray(const std::string& str, size_t& pos) {
     return result;
 }
 
-JsonValue parseObject(const std::string& str, size_t& pos) {
+JsonValue parseObject(std::string const& str, size_t& pos) {
     JsonValue result;
     std::unordered_map<std::string, JsonValue> obj;
 
@@ -731,7 +731,7 @@ JsonValue parseObject(const std::string& str, size_t& pos) {
     return result;
 }
 
-JsonValue parseValue(const std::string& str, size_t& pos) {
+JsonValue parseValue(std::string const& str, size_t& pos) {
     skipWhitespace(str, pos);
 
     if (pos >= str.length()) {
@@ -763,7 +763,7 @@ JsonValue parseValue(const std::string& str, size_t& pos) {
     }
 }
 
-JsonValue parseJson(const std::string& content) {
+JsonValue parseJson(std::string const& content) {
     size_t pos = 0;
     JsonValue result = parseValue(content, pos);
     skipWhitespace(content, pos);

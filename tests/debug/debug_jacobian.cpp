@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
         gpu_solver->enable_state_capture(true);
 
         auto gpu_result = gpu_solver->solve_power_flow(network, *gpu_matrix, config);
-        const auto& gpu_states = gpu_solver->get_iteration_states();
+        auto const& gpu_states = gpu_solver->get_iteration_states();
 
         std::cout << "\nGPU Iteration 0 state:\n";
         if (gpu_states.size() > 0) {
@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
         cpu_solver->enable_state_capture(true);
 
         auto cpu_result = cpu_solver->solve_power_flow(network, *cpu_matrix, config);
-        const auto& cpu_states = cpu_solver->get_iteration_states();
+        auto const& cpu_states = cpu_solver->get_iteration_states();
 
         std::cout << "\nCPU Iteration 0 state:\n";
         if (cpu_states.size() > 0) {

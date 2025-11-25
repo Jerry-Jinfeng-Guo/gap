@@ -1,0 +1,34 @@
+{
+  "name": "Radial 50-Feeder Network (100 nodes/feeder)",
+  "description": "5001-bus radial distribution feeder with 50 main branch(es)",
+  "network_type": "distribution",
+  "topology": "radial",
+  "n_node": 5001,
+  "n_line": 5000,
+  "n_load": 5000,
+  "n_feeder": 50,
+  "n_node_per_feeder": 100,
+  "voltage_level_kv": 10.0,
+  "base_voltage": 10000.0,
+  "frequency": 50.0,
+  "total_load_mw": 291.55,
+  "base_power_va": 10000000.0,
+  "seed": 42,
+  "notes": [
+    "Automatically generated test case",
+    "Loads are 150-200 kW per bus",
+    "Power factor: 0.95 lagging"
+  ],
+  "validation_criteria": {
+    "voltage_magnitude_tolerance_pu": 0.0001,
+    "convergence_required": true
+  },
+  "pgm_reference": {
+    "converged": true,
+    "calculation_time_s": 0.0070438385009765625,
+    "iterations": null,
+    "method": "newton_raphson",
+    "tolerance": 1e-08,
+    "max_iterations": 20
+  }
+}

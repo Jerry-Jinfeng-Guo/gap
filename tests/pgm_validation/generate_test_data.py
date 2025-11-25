@@ -158,7 +158,7 @@ if __name__ == "__main__":
     # Define test case configurations
     # Format: (n_feeder, n_node_per_feeder)
     test_configs = [
-        (1, 2),  # radial_1feeder_2nodepf
+        (1, 2),  # radial_1feeder_2nodepf seed 42
         (1, 4),  # radial_1feeder_4nodepf
         (1, 8),  # radial_1feeder_8nodepf
         (2, 2),  # radial_2feeder_2nodepf
@@ -168,7 +168,13 @@ if __name__ == "__main__":
         (3, 4),  # radial_3feeder_4nodepf
         (3, 8),  # radial_3feeder_8nodepf
         (10, 10),  # radial_10feeder_10nodepf (101 buses)
-        (25, 50),  # radial_25feeder_50nodepf (1251 buses - extreme large case)
+        (25, 50),  # radial_25feeder_50nodepf (1251 buses - large case)
+        (50, 100),  # radial_50feeder_100nodepf (5001 buses - extreme large case)
+        (100, 50),  # radial_100feeder_50nodepf (5001 buses - extreme large case)
+        (
+            100,
+            100,
+        ),  # radial_100feeder_100nodepf (10001 buses - extreme large case) seed 410
     ]
 
     print(f"📋 Generating {len(test_configs)} test cases:")

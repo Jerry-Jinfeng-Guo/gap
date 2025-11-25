@@ -596,9 +596,317 @@ void test_pgm_gpu_smoke_test() {
     ASSERT_TRUE(failed == 0);
 }
 
+/**
+ * @brief Benchmark CPU vs GPU performance across different network sizes
+ */
+void benchmark_cpu_vs_gpu() {
+    std::cout << "\n=== CPU vs GPU Performance Benchmark ===" << std::endl;
+
+    // Find test data directory (try multiple possible paths)
+    std::vector<std::string> possible_paths = {
+        "../tests/pgm_validation/test_data",
+        "../../tests/pgm_validation/test_data",
+        "../../../tests/pgm_validation/test_data",
+        "tests/pgm_validation/test_data",
+    };
+
+    std::string test_data_dir;
+    for (const auto& path : possible_paths) {
+        if (fs::exists(path) && fs::is_directory(path)) {
+            test_data_dir = path;
+            break;
+        }
+    }
+
+    if (test_data_dir.empty()) {
+        std::cerr << "❌ Test data directory not found. Tried:" << std::endl;
+        for (const auto& path : possible_paths) {
+            std::cerr << "  - " << path << std::endl;
+        }
+        return;
+    }
+
+    std::cout << "Using test data directory: " << test_data_dir << std::endl;
+
+    // Select test cases of varying sizes for benchmarking
+    std::vector<std::string> benchmark_cases = {
+        "radial_1feeder_2nodepf",    // 3 nodes (tiny)
+        "radial_1feeder_4nodepf",    // 5 nodes (small)
+        "radial_1feeder_8nodepf",    // 9 nodes (small)
+        "radial_3feeder_8nodepf",    // 25 nodes (medium)
+        "radial_10feeder_10nodepf",  // 101 nodes (large)
+    };
+
+    // Check for even larger cases if available
+    std::vector<std::string> optional_large_cases = {
+        "radial_25feeder_50nodepf",   // ~1251 nodes
+        "radial_50feeder_100nodepf",  // ~5001 nodes
+    };
+
+    for (const auto& large_case : optional_large_cases) {
+        std::string case_path = test_data_dir + "/" + large_case + "/input.json";
+        if (fs::exists(case_path)) {
+            benchmark_cases.push_back(large_case);
+        }
+    }
+
+    std::cout << "\nBenchmarking " << benchmark_cases.size() << " test cases\n" << std::endl;
+    std::cout << std::string(130, '=') << std::endl;
+    printf("%-30s %8s %10s %12s %10s %12s %10s %12s %10s\n", "Test Case", "Buses", "PGM Time",
+           "CPU Time", "CPU Iters", "GPU Time", "GPU Iters", "Speedup", "Match");
+    std::cout << std::string(130, '-') << std::endl;
+
+    bool gpu_available = core::BackendFactory::is_backend_available(BackendType::GPU_CUDA);
+    if (!gpu_available) {
+        std::cerr << "⚠️  GPU backend not available, benchmark will be CPU-only" << std::endl;
+    }
+
+    struct BenchmarkResult {
+        std::string name;
+        int num_buses;
+        double pgm_time_ms;
+        double cpu_time_ms;
+        int cpu_iterations;
+        double gpu_time_ms;
+        int gpu_iterations;
+        bool results_match;
+    };
+
+    std::vector<BenchmarkResult> results;
+    const int num_runs = 3;  // Number of timed runs for averaging
+
+    for (const auto& test_case : benchmark_cases) {
+        std::string input_path = test_data_dir + "/" + test_case + "/input.json";
+
+        if (!fs::exists(input_path)) {
+            continue;
+        }
+
+        BenchmarkResult bench_result;
+        bench_result.name = test_case;
+
+        // Load network
+        auto io = core::BackendFactory::create_io_module();
+        NetworkData network;
+        try {
+            network = io->read_network_data(input_path);
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to load " << test_case << ": " << e.what() << std::endl;
+            continue;
+        }
+
+        bench_result.num_buses = network.num_buses;
+
+        // Read PGM reference calculation time from output.json
+        std::string output_path = test_data_dir + "/" + test_case + "/output.json";
+        bench_result.pgm_time_ms = -1.0;  // Default if not found
+        if (fs::exists(output_path)) {
+            std::ifstream output_file(output_path);
+            std::string line;
+            while (std::getline(output_file, line)) {
+                // Look for "calculation_time_s": value
+                size_t pos = line.find("\"calculation_time_s\"");
+                if (pos != std::string::npos) {
+                    size_t colon_pos = line.find(":", pos);
+                    if (colon_pos != std::string::npos) {
+                        // Extract the number after the colon
+                        std::string value_str = line.substr(colon_pos + 1);
+                        // Remove whitespace, comma, and other JSON chars
+                        value_str.erase(std::remove_if(value_str.begin(), value_str.end(),
+                                                       [](char c) {
+                                                           return c == ',' || c == ' ' ||
+                                                                  c == '\n' || c == '\r';
+                                                       }),
+                                        value_str.end());
+                        try {
+                            double time_s = std::stod(value_str);
+                            bench_result.pgm_time_ms = time_s * 1000.0;  // Convert to ms
+                            break;
+                        } catch (...) {
+                            // Silently skip if parsing fails
+                        }
+                    }
+                }
+            }
+        }
+
+        // Solver configuration
+        solver::PowerFlowConfig config;
+        config.tolerance = 1e-8;
+        config.max_iterations = 100;
+        config.verbose = false;
+
+        // === CPU Benchmark ===
+        auto cpu_admittance = core::BackendFactory::create_admittance_backend(BackendType::CPU);
+        auto cpu_matrix = cpu_admittance->build_admittance_matrix(network);
+
+        auto cpu_pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::CPU);
+        auto cpu_lu_solver = core::BackendFactory::create_lu_solver(BackendType::CPU);
+        cpu_pf_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(cpu_lu_solver.release()));
+
+        // Warmup run
+        auto warmup = cpu_pf_solver->solve_power_flow(network, *cpu_matrix, config);
+        if (!warmup.converged) {
+            std::cerr << "CPU solver failed to converge for " << test_case << std::endl;
+            continue;
+        }
+
+        // Timed runs (average of 3)
+        const int num_runs_inner = num_runs;
+        double total_cpu_time = 0.0;
+        solver::PowerFlowResult cpu_result;
+
+        for (int run = 0; run < num_runs_inner; ++run) {
+            auto start = std::chrono::high_resolution_clock::now();
+            cpu_result = cpu_pf_solver->solve_power_flow(network, *cpu_matrix, config);
+            auto end = std::chrono::high_resolution_clock::now();
+
+            total_cpu_time += std::chrono::duration<double, std::milli>(end - start).count();
+        }
+
+        bench_result.cpu_time_ms = total_cpu_time / num_runs_inner;
+        bench_result.cpu_iterations = cpu_result.iterations;
+
+        // === GPU Benchmark ===
+        if (gpu_available) {
+            auto gpu_admittance =
+                core::BackendFactory::create_admittance_backend(BackendType::GPU_CUDA);
+            auto gpu_matrix = gpu_admittance->build_admittance_matrix(network);
+
+            auto gpu_pf_solver =
+                core::BackendFactory::create_powerflow_solver(BackendType::GPU_CUDA);
+            auto gpu_lu_solver = core::BackendFactory::create_lu_solver(BackendType::GPU_CUDA);
+            gpu_pf_solver->set_lu_solver(
+                std::shared_ptr<solver::ILUSolver>(gpu_lu_solver.release()));
+
+            // Warmup run
+            warmup = gpu_pf_solver->solve_power_flow(network, *gpu_matrix, config);
+            if (!warmup.converged) {
+                std::cerr << "GPU solver failed to converge for " << test_case << std::endl;
+                bench_result.gpu_time_ms = -1.0;
+                bench_result.gpu_iterations = 0;
+                bench_result.results_match = false;
+            } else {
+                // Timed runs (average of 3)
+                double total_gpu_time = 0.0;
+                solver::PowerFlowResult gpu_result;
+
+                for (int run = 0; run < num_runs_inner; ++run) {
+                    auto start = std::chrono::high_resolution_clock::now();
+                    gpu_result = gpu_pf_solver->solve_power_flow(network, *gpu_matrix, config);
+                    auto end = std::chrono::high_resolution_clock::now();
+
+                    total_gpu_time +=
+                        std::chrono::duration<double, std::milli>(end - start).count();
+                }
+
+                bench_result.gpu_time_ms = total_gpu_time / num_runs_inner;
+                bench_result.gpu_iterations = gpu_result.iterations;
+
+                // Check if results match
+                Float max_diff = 0.0;
+                for (size_t i = 0; i < cpu_result.bus_voltages.size(); ++i) {
+                    Float diff = std::abs(std::abs(cpu_result.bus_voltages[i]) -
+                                          std::abs(gpu_result.bus_voltages[i]));
+                    max_diff = std::max(max_diff, diff);
+                }
+                bench_result.results_match = (max_diff < 1e-6);
+            }
+        } else {
+            bench_result.gpu_time_ms = -1.0;
+            bench_result.gpu_iterations = 0;
+            bench_result.results_match = false;
+        }
+
+        results.push_back(bench_result);
+
+        // Print result
+        if (bench_result.gpu_time_ms > 0) {
+            double speedup = bench_result.cpu_time_ms / bench_result.gpu_time_ms;
+            if (bench_result.pgm_time_ms > 0) {
+                printf("%-30s %8d %10.3f ms %10.3f ms %12d %10.3f ms %12d %11.2fx %10s\n",
+                       bench_result.name.c_str(), bench_result.num_buses, bench_result.pgm_time_ms,
+                       bench_result.cpu_time_ms, bench_result.cpu_iterations,
+                       bench_result.gpu_time_ms, bench_result.gpu_iterations, speedup,
+                       bench_result.results_match ? "✓" : "✗");
+            } else {
+                printf("%-30s %8d %10s %10.3f ms %12d %10.3f ms %12d %11.2fx %10s\n",
+                       bench_result.name.c_str(), bench_result.num_buses, "N/A",
+                       bench_result.cpu_time_ms, bench_result.cpu_iterations,
+                       bench_result.gpu_time_ms, bench_result.gpu_iterations, speedup,
+                       bench_result.results_match ? "✓" : "✗");
+            }
+        } else {
+            if (bench_result.pgm_time_ms > 0) {
+                printf("%-30s %8d %10.3f ms %10.3f ms %12d %10s %12s %12s %10s\n",
+                       bench_result.name.c_str(), bench_result.num_buses, bench_result.pgm_time_ms,
+                       bench_result.cpu_time_ms, bench_result.cpu_iterations, "N/A", "N/A", "N/A",
+                       "N/A");
+            } else {
+                printf("%-30s %8d %10s %10.3f ms %12d %10s %12s %12s %10s\n",
+                       bench_result.name.c_str(), bench_result.num_buses, "N/A",
+                       bench_result.cpu_time_ms, bench_result.cpu_iterations, "N/A", "N/A", "N/A",
+                       "N/A");
+            }
+        }
+    }
+
+    std::cout << std::string(130, '=') << std::endl;
+
+    // Summary statistics
+    if (gpu_available && !results.empty()) {
+        double total_speedup = 0.0;
+        int speedup_count = 0;
+        int crossover_buses = -1;
+
+        for (const auto& result : results) {
+            if (result.gpu_time_ms > 0) {
+                double speedup = result.cpu_time_ms / result.gpu_time_ms;
+                total_speedup += speedup;
+                speedup_count++;
+
+                // Find crossover point where GPU becomes faster
+                if (crossover_buses == -1 && speedup > 1.0) {
+                    crossover_buses = result.num_buses;
+                }
+            }
+        }
+
+        std::cout << "\nSummary:" << std::endl;
+        std::cout << "  Average speedup: " << (total_speedup / speedup_count) << "x" << std::endl;
+        if (crossover_buses > 0) {
+            std::cout << "  GPU becomes faster at: ~" << crossover_buses << " buses" << std::endl;
+        } else {
+            std::cout << "  GPU overhead dominates for all tested sizes" << std::endl;
+        }
+
+        // Check if all results match
+        bool all_match = true;
+        for (const auto& result : results) {
+            if (result.gpu_time_ms > 0 && !result.results_match) {
+                all_match = false;
+                break;
+            }
+        }
+        std::cout << "  Result accuracy: " << (all_match ? "All match ✓" : "Some mismatches ✗")
+                  << std::endl;
+    }
+
+    std::cout << "\nNotes:" << std::endl;
+    std::cout << "  - PGM times are from reference calculation (single run)" << std::endl;
+    std::cout << "  - CPU/GPU times are averages of " << num_runs << " runs after warmup"
+              << std::endl;
+    std::cout << "  - GPU overhead includes data transfer and kernel launch" << std::endl;
+    std::cout << "  - Speedup = CPU time / GPU time" << std::endl;
+    std::cout << std::string(130, '=') << std::endl;
+}
+
 // Register tests with the test runner
 void register_pgm_gpu_validation_tests([[maybe_unused]] TestRunner& runner) {
     std::cout << "Registering PGM GPU validation tests..." << std::endl;
+
+    // Active tests
+    runner.add_test("CPU vs GPU Performance Benchmark", []() { benchmark_cpu_vs_gpu(); });
 
     // Temporarily disabled - PGM comparison has issues with angle tolerances
     // The actual CPU vs GPU solvers match perfectly (verified with debug_state_compare)

@@ -28,7 +28,11 @@ if(GAP_ENABLE_CUDA)
     )
     set_target_properties(gap_core PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
+        # Disable LTO to avoid conflicts with CUDA device code linking
+        INTERPROCEDURAL_OPTIMIZATION OFF
     )
+    # Disable LTO at compile time as well
+    target_compile_options(gap_core PRIVATE -fno-lto)
 endif()
 
 # IO Module

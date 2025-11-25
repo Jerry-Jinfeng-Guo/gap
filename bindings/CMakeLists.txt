@@ -11,14 +11,21 @@ set(GAP_PYTHON_SOURCES
     io_bindings.cpp
 )
 
-# Add CUDA sources only if CUDA is available
-# NOTE: GPU backend currently disabled for Python bindings (see linking section below)
-# GAP_CUDA_AVAILABLE is already defined globally in main CMakeLists.txt
-if(GAP_ENABLE_CUDA AND FALSE)  # Temporarily disabled
-    list(APPEND GAP_PYTHON_SOURCES cuda_bindings.cpp)
+# Enable CUDA support when available
+# LTO (Link Time Optimization) conflict is resolved by disabling LTO below
+if(GAP_ENABLE_CUDA)
+    list(APPEND GAP_PYTHON_SOURCES 
+        cuda_bindings.cpp
+    )
     message(STATUS "Python bindings: CUDA support enabled")
 else()
-    message(STATUS "Python bindings: CPU-only build (GPU backend available in C++)")
+    message(STATUS "Python bindings: CPU-only")
+endif()
+
+# Disable LTO when CUDA is enabled to prevent symbol conflicts
+# Must be set BEFORE calling pybind11_add_module
+if(GAP_ENABLE_CUDA)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
 endif()
 
 # Create the Python module
@@ -32,6 +39,18 @@ set_target_properties(gap_solver PROPERTIES
     CXX_VISIBILITY_PRESET "hidden"
     VISIBILITY_INLINES_HIDDEN ON
 )
+
+# Disable LTO (Link Time Optimization) when CUDA is enabled
+# LTO from the host compiler conflicts with CUDA's device code linking
+# causing "undefined symbol: fatbinData" errors
+if(GAP_ENABLE_CUDA)
+    set_target_properties(gap_solver PROPERTIES
+        INTERPROCEDURAL_OPTIMIZATION OFF
+    )
+    # Force disable LTO in both compile and link stages
+    target_compile_options(gap_solver PRIVATE -fno-lto)
+    target_link_options(gap_solver PRIVATE -fno-lto)
+endif()
 
 # Include directories
 target_include_directories(gap_solver PRIVATE
@@ -53,25 +72,13 @@ target_link_libraries(gap_solver PRIVATE
     gap_lu_cpu
 )
 
-# Link CUDA libraries and GPU backends if CUDA is enabled
-# NOTE: GPU backend linking currently disabled for Python bindings due to
-# CUDA static library linking issues (undefined symbol: fatbinData)
-# The C++ GPU backend works perfectly - this only affects Python bindings
-if(GAP_ENABLE_CUDA AND FALSE)  # Temporarily disabled
+# Link GPU libraries when CUDA is enabled
+if(GAP_ENABLE_CUDA)
     target_link_libraries(gap_solver PRIVATE
         gap_powerflow_gpu
         gap_admittance_gpu
         gap_lu_gpu
-        CUDA::cublas
-        CUDA::cusolver
-        CUDA::cudart
     )
-    
-    # Set CUDA properties if needed
-    set_property(TARGET gap_solver PROPERTY CUDA_STANDARD 20)
-    set_property(TARGET gap_solver PROPERTY CUDA_STANDARD_REQUIRED ON)
-    set_property(TARGET gap_solver PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-    set_property(TARGET gap_solver PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 endif()
 
 # Compiler-specific options for the Python module

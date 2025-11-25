@@ -597,7 +597,7 @@ void test_pgm_gpu_smoke_test() {
 }
 
 // Register tests with the test runner
-void register_pgm_gpu_validation_tests(TestRunner& runner) {
+void register_pgm_gpu_validation_tests([[maybe_unused]] TestRunner& runner) {
     std::cout << "Registering PGM GPU validation tests..." << std::endl;
 
     // Temporarily disabled - PGM comparison has issues with angle tolerances

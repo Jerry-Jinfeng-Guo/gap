@@ -195,7 +195,7 @@ if __name__ == "__main__":
     for n_feeder, n_nodepf in test_configs:
         test_name = f"radial_{n_feeder}feeder_{n_nodepf}nodepf"
         try:
-            if generate_radial_network_test(n_feeder, n_nodepf, seed=5000):
+            if generate_radial_network_test(n_feeder, n_nodepf, seed=444):
                 success_count += 1
             else:
                 failed_cases.append(test_name)

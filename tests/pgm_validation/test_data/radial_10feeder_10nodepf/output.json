@@ -3028,10 +3028,10 @@
   "meta": {
     "solver": "power_grid_model",
     "calculation_method": "newton_raphson",
-    "calculation_time_s": 0.0001995563507080078,
+    "calculation_time_s": 0.002047300338745117,
     "symmetric": true,
     "converged": true,
     "base_power_va": 1.0,
-    "timestamp": 1763372417.8667111
+    "timestamp": 1764078925.513285
   }
 }

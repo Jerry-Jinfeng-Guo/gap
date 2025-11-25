@@ -70,6 +70,9 @@ class PGMReferenceSolver:
         Returns:
             Dictionary with solution info and metadata
         """
+        # Start timing for full end-to-end measurement (including IO and model creation)
+        start_time = time.time()
+
         # Load input data
         with open(input_file, "r") as f:
             input_data = json.load(f)
@@ -105,7 +108,6 @@ class PGMReferenceSolver:
             update_data = self._convert_to_pgm_update(update_json)
 
         # Run power flow calculation
-        start_time = time.time()
         try:
             if update_data:
                 # Batch calculation with updates

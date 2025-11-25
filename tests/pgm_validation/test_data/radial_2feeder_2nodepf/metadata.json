@@ -25,7 +25,7 @@
   },
   "pgm_reference": {
     "converged": true,
-    "calculation_time_s": 0.00011610984802246094,
+    "calculation_time_s": 0.0021255016326904297,
     "iterations": null,
     "method": "newton_raphson",
     "tolerance": 1e-08,

@@ -37528,10 +37528,10 @@
   "meta": {
     "solver": "power_grid_model",
     "calculation_method": "newton_raphson",
-    "calculation_time_s": 0.0037069320678710938,
+    "calculation_time_s": 0.01239156723022461,
     "symmetric": true,
     "converged": true,
     "base_power_va": 1.0,
-    "timestamp": 1763376392.4550223
+    "timestamp": 1764078925.57017
   }
 }

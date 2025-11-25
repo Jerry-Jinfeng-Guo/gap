@@ -148,7 +148,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
 
         // === OPTIMIZATION: Stable sort ensures deterministic ordering for duplicate (row,col)
         // entries === (needed when multiple branches connect the same bus pair)
-        std::ranges::stable_sort(triplets, [](const Triplet& a, const Triplet& b) {
+        std::ranges::stable_sort(triplets, [](Triplet const& a, Triplet const& b) {
             if (a.row != b.row) return a.row < b.row;
             return a.col < b.col;
         });
@@ -202,7 +202,7 @@ class CPUAdmittanceMatrix : public IAdmittanceMatrix {
     }
 
     std::unique_ptr<SparseMatrix> update_admittance_matrix(
-        const SparseMatrix& matrix, const std::vector<BranchData>& branch_changes) override {
+        SparseMatrix const& matrix, const std::vector<BranchData>& branch_changes) override {
         auto& logger = gap::logging::global_logger;
         logger.setComponent("CPUAdmittanceMatrix");
         LOG_INFO(logger, "Updating admittance matrix");

@@ -25,7 +25,7 @@ namespace gap {
 constexpr int VERSION_MAJOR = GAP_VERSION_MAJOR;
 constexpr int VERSION_MINOR = GAP_VERSION_MINOR;
 constexpr int VERSION_PATCH = GAP_VERSION_PATCH;
-constexpr const char* VERSION_STRING = GAP_VERSION_STRING;
+constexpr char const* VERSION_STRING = GAP_VERSION_STRING;
 
 constexpr bool CUDA_ENABLED = 
 #if GAP_CUDA_ENABLED
@@ -34,7 +34,7 @@ constexpr bool CUDA_ENABLED =
     false;
 #endif
 
-constexpr const char* BUILD_TYPE = 
+constexpr char const* BUILD_TYPE = 
 #ifdef GAP_BUILD_TYPE
     GAP_BUILD_TYPE;
 #else

@@ -26,7 +26,7 @@ struct DeviceTriplet {
 
 // Comparison functor for sorting triplets by (row, col)
 struct TripletComparator {
-    __device__ __host__ bool operator()(const DeviceTriplet& a, const DeviceTriplet& b) const {
+    __device__ __host__ bool operator()(DeviceTriplet const& a, DeviceTriplet const& b) const {
         if (a.row != b.row) return a.row < b.row;
         return a.col < b.col;
     }
@@ -34,7 +34,7 @@ struct TripletComparator {
 
 // CUDA kernel: Compute branch admittances in parallel
 __global__ void compute_branch_admittances_kernel(const gap::BranchData* branches, int num_branches,
-                                                  const int* id_to_idx, int max_bus_id,
+                                                  int const* id_to_idx, int max_bus_id,
                                                   DeviceTriplet* triplets, int* valid_branches,
                                                   cuDoubleComplex* diagonal_accumulator) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -94,7 +94,7 @@ __global__ void compute_branch_admittances_kernel(const gap::BranchData* branche
 
 // CUDA kernel: Add shunt appliances to diagonal
 __global__ void accumulate_shunt_appliances_kernel(const gap::ApplianceData* appliances,
-                                                   int num_appliances, const int* id_to_idx,
+                                                   int num_appliances, int const* id_to_idx,
                                                    int max_bus_id,
                                                    cuDoubleComplex* diagonal_accumulator) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -115,7 +115,7 @@ __global__ void accumulate_shunt_appliances_kernel(const gap::ApplianceData* app
 }
 
 // Device helper function: Find CSR element index for (row, col)
-__device__ int find_csr_element(const int* row_ptr, const int* col_idx, int row, int col) {
+__device__ int find_csr_element(int const* row_ptr, int const* col_idx, int row, int col) {
     int start = row_ptr[row];
     int end = row_ptr[row + 1];
 
@@ -129,8 +129,8 @@ __device__ int find_csr_element(const int* row_ptr, const int* col_idx, int row,
 
 // CUDA kernel: Update admittance matrix elements in parallel
 __global__ void update_admittance_matrix_kernel(const gap::BranchData* branch_changes,
-                                                int num_changes, const int* row_ptr,
-                                                const int* col_idx, cuDoubleComplex* values,
+                                                int num_changes, int const* row_ptr,
+                                                int const* col_idx, cuDoubleComplex* values,
                                                 int num_rows) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_changes) return;

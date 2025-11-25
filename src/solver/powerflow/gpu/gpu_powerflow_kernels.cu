@@ -13,10 +13,10 @@ namespace gap::solver::gpu_kernels {
  * Uses CSR sparse matrix-vector multiplication
  * Each thread computes one row (one bus current injection)
  */
-__global__ void calculate_current_injections_kernel(const int* __restrict__ row_ptr,
-                                                    const int* __restrict__ col_idx,
-                                                    const cuDoubleComplex* __restrict__ y_values,
-                                                    const cuDoubleComplex* __restrict__ voltages,
+__global__ void calculate_current_injections_kernel(int const* __restrict__ row_ptr,
+                                                    int const* __restrict__ col_idx,
+                                                    cuDoubleComplex const* __restrict__ y_values,
+                                                    cuDoubleComplex const* __restrict__ voltages,
                                                     cuDoubleComplex* __restrict__ currents,
                                                     int num_buses) {
     int bus_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -46,9 +46,9 @@ __global__ void calculate_current_injections_kernel(const int* __restrict__ row_
  * Also calculates power mismatches for PQ and PV buses
  */
 __global__ void calculate_power_mismatches_kernel(
-    const cuDoubleComplex* __restrict__ voltages, const cuDoubleComplex* __restrict__ currents,
-    const cuDoubleComplex* __restrict__ specified_power,
-    const int* __restrict__ bus_types,  // 0=SLACK, 1=PQ, 2=PV
+    cuDoubleComplex const* __restrict__ voltages, cuDoubleComplex const* __restrict__ currents,
+    cuDoubleComplex const* __restrict__ specified_power,
+    int const* __restrict__ bus_types,  // 0=SLACK, 1=PQ, 2=PV
     double* __restrict__ mismatches, int num_buses,
     int* __restrict__ mismatch_indices  // Maps bus -> mismatch vector index
 ) {
@@ -91,9 +91,9 @@ __global__ void calculate_power_mismatches_kernel(
  * of the sparsity pattern
  */
 __global__ void calculate_jacobian_diagonal_kernel(
-    const int* __restrict__ row_ptr, const int* __restrict__ col_idx,
-    const cuDoubleComplex* __restrict__ y_values, const cuDoubleComplex* __restrict__ voltages,
-    const cuDoubleComplex* __restrict__ currents, const int* __restrict__ bus_types,
+    int const* __restrict__ row_ptr, int const* __restrict__ col_idx,
+    cuDoubleComplex const* __restrict__ y_values, cuDoubleComplex const* __restrict__ voltages,
+    cuDoubleComplex const* __restrict__ currents, int const* __restrict__ bus_types,
     cuDoubleComplex* __restrict__ jacobian_diag, int num_buses) {
     int bus_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -137,12 +137,12 @@ __global__ void calculate_jacobian_diagonal_kernel(
  * Each thread computes one row of the Jacobian
  */
 __global__ void build_jacobian_dense_kernel(
-    const int* __restrict__ y_row_ptr, const int* __restrict__ y_col_idx,
-    const cuDoubleComplex* __restrict__ y_values, const cuDoubleComplex* __restrict__ voltages,
-    const cuDoubleComplex* __restrict__ powers,  // Calculated S = V * conj(I)
-    const int* __restrict__ bus_types,
-    const int* __restrict__ angle_var_idx,  // Maps bus_id -> angle variable index (-1 if slack)
-    const int* __restrict__ mag_var_idx,  // Maps bus_id -> magnitude variable index (-1 if not PQ)
+    int const* __restrict__ y_row_ptr, int const* __restrict__ y_col_idx,
+    cuDoubleComplex const* __restrict__ y_values, cuDoubleComplex const* __restrict__ voltages,
+    cuDoubleComplex const* __restrict__ powers,  // Calculated S = V * conj(I)
+    int const* __restrict__ bus_types,
+    int const* __restrict__ angle_var_idx,  // Maps bus_id -> angle variable index (-1 if slack)
+    int const* __restrict__ mag_var_idx,  // Maps bus_id -> magnitude variable index (-1 if not PQ)
     double* __restrict__ jacobian,        // Output: Dense Jacobian matrix (row-major)
     int num_buses, int num_vars) {
     int eq_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -315,10 +315,10 @@ __global__ void build_jacobian_dense_kernel(
  *
  * For each non-zero Y_ij, calculate dS_i/dV_j = Y_ij * V_i
  */
-__global__ void calculate_jacobian_offdiag_kernel(const int* __restrict__ row_ptr,
-                                                  const int* __restrict__ col_idx,
-                                                  const cuDoubleComplex* __restrict__ y_values,
-                                                  const cuDoubleComplex* __restrict__ voltages,
+__global__ void calculate_jacobian_offdiag_kernel(int const* __restrict__ row_ptr,
+                                                  int const* __restrict__ col_idx,
+                                                  cuDoubleComplex const* __restrict__ y_values,
+                                                  cuDoubleComplex const* __restrict__ voltages,
                                                   cuDoubleComplex* __restrict__ jacobian_values,
                                                   int num_buses) {
     int bus_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -347,9 +347,9 @@ __global__ void calculate_jacobian_offdiag_kernel(const int* __restrict__ row_pt
  * @brief CUDA kernel to update voltages: V_new = V_old + alpha * deltaV
  */
 __global__ void update_voltages_kernel(
-    cuDoubleComplex* __restrict__ voltages, const cuDoubleComplex* __restrict__ delta_v,
-    const int* __restrict__ bus_types,
-    const int* __restrict__ voltage_indices,  // Maps bus -> delta_v index
+    cuDoubleComplex* __restrict__ voltages, cuDoubleComplex const* __restrict__ delta_v,
+    int const* __restrict__ bus_types,
+    int const* __restrict__ voltage_indices,  // Maps bus -> delta_v index
     double acceleration_factor, int num_buses) {
     int bus_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -390,7 +390,7 @@ __global__ void update_voltages_kernel(
 /**
  * @brief CUDA kernel to find maximum mismatch (for convergence check)
  */
-__global__ void reduce_max_mismatch_kernel(const double* __restrict__ mismatches,
+__global__ void reduce_max_mismatch_kernel(double const* __restrict__ mismatches,
                                            double* __restrict__ partial_max, int num_mismatches) {
     extern __shared__ double sdata[];
 
@@ -419,8 +419,8 @@ __global__ void reduce_max_mismatch_kernel(const double* __restrict__ mismatches
  * @brief Initialize voltage vector with flat start
  */
 __global__ void initialize_voltages_flat_start_kernel(
-    cuDoubleComplex* __restrict__ voltages, const int* __restrict__ bus_types,
-    const double* __restrict__ specified_magnitudes, int num_buses) {
+    cuDoubleComplex* __restrict__ voltages, int const* __restrict__ bus_types,
+    double const* __restrict__ specified_magnitudes, int num_buses) {
     int bus_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (bus_idx < num_buses) {
@@ -442,9 +442,9 @@ __global__ void initialize_voltages_flat_start_kernel(
 // Host wrapper functions
 // ============================================================================
 
-void launch_calculate_current_injections(const int* d_row_ptr, const int* d_col_idx,
-                                         const cuDoubleComplex* d_y_values,
-                                         const cuDoubleComplex* d_voltages,
+void launch_calculate_current_injections(int const* d_row_ptr, int const* d_col_idx,
+                                         cuDoubleComplex const* d_y_values,
+                                         cuDoubleComplex const* d_voltages,
                                          cuDoubleComplex* d_currents, int num_buses) {
     int blockSize = 256;
     int numBlocks = (num_buses + blockSize - 1) / blockSize;
@@ -455,10 +455,10 @@ void launch_calculate_current_injections(const int* d_row_ptr, const int* d_col_
     cudaDeviceSynchronize();
 }
 
-void launch_calculate_power_mismatches(const cuDoubleComplex* d_voltages,
-                                       const cuDoubleComplex* d_currents,
-                                       const cuDoubleComplex* d_specified_power,
-                                       const int* d_bus_types, double* d_mismatches, int num_buses,
+void launch_calculate_power_mismatches(cuDoubleComplex const* d_voltages,
+                                       cuDoubleComplex const* d_currents,
+                                       cuDoubleComplex const* d_specified_power,
+                                       int const* d_bus_types, double* d_mismatches, int num_buses,
                                        int* d_mismatch_indices) {
     int blockSize = 256;
     int numBlocks = (num_buses + blockSize - 1) / blockSize;
@@ -470,8 +470,8 @@ void launch_calculate_power_mismatches(const cuDoubleComplex* d_voltages,
     cudaDeviceSynchronize();
 }
 
-void launch_update_voltages(cuDoubleComplex* d_voltages, const cuDoubleComplex* d_delta_v,
-                            const int* d_bus_types, const int* d_voltage_indices,
+void launch_update_voltages(cuDoubleComplex* d_voltages, cuDoubleComplex const* d_delta_v,
+                            int const* d_bus_types, int const* d_voltage_indices,
                             double acceleration_factor, int num_buses) {
     int blockSize = 256;
     int numBlocks = (num_buses + blockSize - 1) / blockSize;
@@ -482,8 +482,8 @@ void launch_update_voltages(cuDoubleComplex* d_voltages, const cuDoubleComplex* 
     cudaDeviceSynchronize();
 }
 
-void launch_initialize_flat_start(cuDoubleComplex* d_voltages, const int* d_bus_types,
-                                  const double* d_specified_magnitudes, int num_buses) {
+void launch_initialize_flat_start(cuDoubleComplex* d_voltages, int const* d_bus_types,
+                                  double const* d_specified_magnitudes, int num_buses) {
     int blockSize = 256;
     int numBlocks = (num_buses + blockSize - 1) / blockSize;
 
@@ -493,11 +493,11 @@ void launch_initialize_flat_start(cuDoubleComplex* d_voltages, const int* d_bus_
     cudaDeviceSynchronize();
 }
 
-void launch_build_jacobian_dense(const int* d_y_row_ptr, const int* d_y_col_idx,
-                                 const cuDoubleComplex* d_y_values,
-                                 const cuDoubleComplex* d_voltages, const cuDoubleComplex* d_powers,
-                                 const int* d_bus_types, const int* d_angle_var_idx,
-                                 const int* d_mag_var_idx, double* d_jacobian, int num_buses,
+void launch_build_jacobian_dense(int const* d_y_row_ptr, int const* d_y_col_idx,
+                                 cuDoubleComplex const* d_y_values,
+                                 cuDoubleComplex const* d_voltages, cuDoubleComplex const* d_powers,
+                                 int const* d_bus_types, int const* d_angle_var_idx,
+                                 int const* d_mag_var_idx, double* d_jacobian, int num_buses,
                                  int num_vars) {
     int blockSize = 256;
     int numBlocks = (num_vars + blockSize - 1) / blockSize;
@@ -513,8 +513,8 @@ void launch_build_jacobian_dense(const int* d_y_row_ptr, const int* d_y_col_idx,
  * @brief Helper to calculate power injections: S = V * conj(I)
  * This is needed before building the Jacobian
  */
-__global__ void calculate_power_injections_kernel(const cuDoubleComplex* __restrict__ voltages,
-                                                  const cuDoubleComplex* __restrict__ currents,
+__global__ void calculate_power_injections_kernel(cuDoubleComplex const* __restrict__ voltages,
+                                                  cuDoubleComplex const* __restrict__ currents,
                                                   cuDoubleComplex* __restrict__ powers,
                                                   int num_buses) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -525,8 +525,8 @@ __global__ void calculate_power_injections_kernel(const cuDoubleComplex* __restr
     }
 }
 
-void launch_calculate_power_injections(const cuDoubleComplex* d_voltages,
-                                       const cuDoubleComplex* d_currents, cuDoubleComplex* d_powers,
+void launch_calculate_power_injections(cuDoubleComplex const* d_voltages,
+                                       cuDoubleComplex const* d_currents, cuDoubleComplex* d_powers,
                                        int num_buses) {
     int blockSize = 256;
     int numBlocks = (num_buses + blockSize - 1) / blockSize;

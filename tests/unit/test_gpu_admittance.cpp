@@ -36,12 +36,12 @@ std::string find_data_file(std::string const& relative_path) {
 }
 
 // Helper function to compare two complex numbers
-bool complex_near(const Complex& a, const Complex& b, double tol = 1e-10) {
+bool complex_near(Complex const& a, Complex const& b, double tol = 1e-10) {
     return std::abs(a.real() - b.real()) < tol && std::abs(a.imag() - b.imag()) < tol;
 }
 
 // Helper function to compare two sparse matrices
-bool matrices_equal(const SparseMatrix& cpu_matrix, const SparseMatrix& gpu_matrix,
+bool matrices_equal(SparseMatrix const& cpu_matrix, SparseMatrix const& gpu_matrix,
                     double tol = 1e-10) {
     if (cpu_matrix.num_rows != gpu_matrix.num_rows || cpu_matrix.num_cols != gpu_matrix.num_cols ||
         cpu_matrix.nnz != gpu_matrix.nnz) {

@@ -78,14 +78,14 @@ class JsonValue {
         return type_ == OBJECT && obj_value_.find(key) != obj_value_.end();
     }
 
-    const JsonValue& operator[](std::string const& key) const {
+    JsonValue const& operator[](std::string const& key) const {
         if (type_ != OBJECT) throw std::runtime_error("Not an object");
         auto it = obj_value_.find(key);
         if (it == obj_value_.end()) throw std::runtime_error("Key not found: " + key);
         return it->second;
     }
 
-    const JsonValue& operator[](size_t index) const {
+    JsonValue const& operator[](size_t index) const {
         if (type_ != ARRAY) throw std::runtime_error("Not an array");
         if (index >= arr_value_.size()) throw std::runtime_error("Index out of range");
         return arr_value_[index];
@@ -110,7 +110,7 @@ namespace gap::io {
 /**
  * @brief Convert PGM node to GAP BusData
  */
-BusData convertPgmNode(const JsonValue& pgm_node) {
+BusData convertPgmNode(JsonValue const& pgm_node) {
     BusData bus;
     bus.id = static_cast<int>(pgm_node["id"].asNumber());
     bus.u_rated = pgm_node["u_rated"].asNumber();
@@ -127,7 +127,7 @@ BusData convertPgmNode(const JsonValue& pgm_node) {
 /**
  * @brief Convert PGM line to GAP BranchData
  */
-BranchData convertPgmLine(const JsonValue& pgm_line) {
+BranchData convertPgmLine(JsonValue const& pgm_line) {
     BranchData branch;
     branch.id = static_cast<int>(pgm_line["id"].asNumber());
     branch.from_bus = static_cast<int>(pgm_line["from_node"].asNumber());
@@ -165,7 +165,7 @@ BranchData convertPgmLine(const JsonValue& pgm_line) {
 /**
  * @brief Convert PGM source to GAP ApplianceData
  */
-ApplianceData convertPgmSource(const JsonValue& pgm_source) {
+ApplianceData convertPgmSource(JsonValue const& pgm_source) {
     ApplianceData appliance;
     appliance.id = static_cast<int>(pgm_source["id"].asNumber());
     appliance.node = static_cast<int>(pgm_source["node"].asNumber());
@@ -192,7 +192,7 @@ ApplianceData convertPgmSource(const JsonValue& pgm_source) {
 /**
  * @brief Convert PGM load to GAP ApplianceData
  */
-ApplianceData convertPgmLoad(const JsonValue& pgm_load) {
+ApplianceData convertPgmLoad(JsonValue const& pgm_load) {
     ApplianceData appliance;
     appliance.id = static_cast<int>(pgm_load["id"].asNumber());
     appliance.node = static_cast<int>(pgm_load["node"].asNumber());
@@ -213,7 +213,7 @@ ApplianceData convertPgmLoad(const JsonValue& pgm_load) {
 /**
  * @brief Convert PGM transformer to GAP BranchData
  */
-BranchData convertPgmTransformer(const JsonValue& pgm_transformer) {
+BranchData convertPgmTransformer(JsonValue const& pgm_transformer) {
     BranchData branch;
     branch.id = static_cast<int>(pgm_transformer["id"].asNumber());
     branch.from_bus = static_cast<int>(pgm_transformer["from_node"].asNumber());
@@ -287,7 +287,7 @@ BranchData convertPgmTransformer(const JsonValue& pgm_transformer) {
 /**
  * @brief Convert PGM generic_branch to GAP BranchData
  */
-BranchData convertPgmGenericBranch(const JsonValue& pgm_generic) {
+BranchData convertPgmGenericBranch(JsonValue const& pgm_generic) {
     BranchData branch;
     branch.id = static_cast<int>(pgm_generic["id"].asNumber());
     branch.from_bus = static_cast<int>(pgm_generic["from_node"].asNumber());
@@ -355,9 +355,9 @@ void inferBusTypes(NetworkData& network) {
 
         bool has_source = false;
         bool has_pv_gen = false;
-        const ApplianceData* source_appliance = nullptr;
+        ApplianceData const* source_appliance = nullptr;
 
-        for (const auto* appliance : it->second) {
+        for (auto const* appliance : it->second) {
             if (appliance->type == ApplianceType::SOURCE) {
                 has_source = true;
                 source_appliance = appliance;
@@ -420,11 +420,11 @@ class JsonIOModule : public IIOModule {
         }
 
         // Extract data section
-        const JsonValue& data_section = root["data"];
+        JsonValue const& data_section = root["data"];
 
         // Convert PGM nodes to GAP buses
         if (data_section.contains("node")) {
-            const JsonValue& nodes = data_section["node"];
+            JsonValue const& nodes = data_section["node"];
             for (size_t i = 0; i < nodes.size(); ++i) {
                 BusData bus = convertPgmNode(nodes[i]);
                 network.buses.push_back(bus);
@@ -433,7 +433,7 @@ class JsonIOModule : public IIOModule {
 
         // Convert PGM lines to GAP branches
         if (data_section.contains("line")) {
-            const JsonValue& lines = data_section["line"];
+            JsonValue const& lines = data_section["line"];
             for (size_t i = 0; i < lines.size(); ++i) {
                 BranchData branch = convertPgmLine(lines[i]);
                 network.branches.push_back(branch);
@@ -442,7 +442,7 @@ class JsonIOModule : public IIOModule {
 
         // Convert PGM transformers to GAP branches
         if (data_section.contains("transformer")) {
-            const JsonValue& transformers = data_section["transformer"];
+            JsonValue const& transformers = data_section["transformer"];
             for (size_t i = 0; i < transformers.size(); ++i) {
                 BranchData branch = convertPgmTransformer(transformers[i]);
                 network.branches.push_back(branch);
@@ -451,7 +451,7 @@ class JsonIOModule : public IIOModule {
 
         // Convert PGM generic branches to GAP branches
         if (data_section.contains("generic_branch")) {
-            const JsonValue& generic_branches = data_section["generic_branch"];
+            JsonValue const& generic_branches = data_section["generic_branch"];
             for (size_t i = 0; i < generic_branches.size(); ++i) {
                 BranchData branch = convertPgmGenericBranch(generic_branches[i]);
                 network.branches.push_back(branch);
@@ -460,7 +460,7 @@ class JsonIOModule : public IIOModule {
 
         // Convert PGM sources to GAP appliances
         if (data_section.contains("source")) {
-            const JsonValue& sources = data_section["source"];
+            JsonValue const& sources = data_section["source"];
             for (size_t i = 0; i < sources.size(); ++i) {
                 ApplianceData appliance = convertPgmSource(sources[i]);
                 network.appliances.push_back(appliance);
@@ -469,7 +469,7 @@ class JsonIOModule : public IIOModule {
 
         // Convert PGM loads to GAP appliances
         if (data_section.contains("sym_load")) {
-            const JsonValue& loads = data_section["sym_load"];
+            JsonValue const& loads = data_section["sym_load"];
             for (size_t i = 0; i < loads.size(); ++i) {
                 ApplianceData appliance = convertPgmLoad(loads[i]);
                 network.appliances.push_back(appliance);
@@ -478,7 +478,7 @@ class JsonIOModule : public IIOModule {
 
         // Convert PGM generators (if present)
         if (data_section.contains("sym_gen")) {
-            const JsonValue& generators = data_section["sym_gen"];
+            JsonValue const& generators = data_section["sym_gen"];
             for (size_t i = 0; i < generators.size(); ++i) {
                 ApplianceData appliance = convertPgmLoad(generators[i]);  // Same structure as load
                 network.appliances.push_back(appliance);

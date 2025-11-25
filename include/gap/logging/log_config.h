@@ -54,9 +54,9 @@ class LogConfig {
      * @brief Configure logging from environment variable GAP_LOG_LEVEL
      */
     static void fromEnvironment() {
-        const char* level_env = std::getenv("GAP_LOG_LEVEL");
-        const char* output_env = std::getenv("GAP_LOG_OUTPUT");
-        const char* file_env = std::getenv("GAP_LOG_FILE");
+        char const* level_env = std::getenv("GAP_LOG_LEVEL");
+        char const* output_env = std::getenv("GAP_LOG_OUTPUT");
+        char const* file_env = std::getenv("GAP_LOG_FILE");
 
         LogLevel level = LogLevel::INFO;  // default
         if (level_env) {

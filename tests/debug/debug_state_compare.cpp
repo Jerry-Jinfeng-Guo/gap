@@ -21,7 +21,7 @@
 using namespace gap;
 namespace fs = std::filesystem;
 
-void print_complex(const Complex& c) {
+void print_complex(Complex const& c) {
     std::cout << std::fixed << std::setprecision(6) << "(" << c.real() << ", " << c.imag() << ")";
 }
 

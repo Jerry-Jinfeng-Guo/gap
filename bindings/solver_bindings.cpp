@@ -175,7 +175,7 @@ void init_solver_bindings(pybind11::module& m) {
 
                 return output;
 
-            } catch (std const ::exception& e) {
+            } catch (std::exception const& e) {
                 throw std::runtime_error(std::string("Simple power flow solution failed: ") +
                                          e.what());
             }

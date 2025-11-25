@@ -23,7 +23,7 @@ using namespace gap;
 using namespace gap::solver;
 
 void print_comparison(std::string const& label, double cpu_val, double gpu_val,
-                      bool /*is_complex*/ = false) {
+                      [[maybe_unused]] bool is_complex = false) {
     double abs_diff = std::abs(cpu_val - gpu_val);
 
     std::cout << std::setw(30) << std::left << label << ": " << std::scientific

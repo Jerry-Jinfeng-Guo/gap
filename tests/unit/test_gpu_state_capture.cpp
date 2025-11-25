@@ -57,7 +57,7 @@ void print_iteration_state(const solver::IterationState& state, int num_buses_to
     }
 }
 
-int main(int /*argc*/, char** /*argv*/) {
+int main([[maybe_unused]] int argc, [[maybe_unused]] char** argv) {
     auto& logger = logging::global_logger;
     logger.setComponent("GPUStateCapture");
     logger.configure(logging::LogLevel::INFO, logging::LogOutput::CONSOLE);

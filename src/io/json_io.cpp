@@ -214,7 +214,7 @@ ApplianceData convertPgmLoad(JsonValue const& pgm_load) {
         auto const& type_field = pgm_load["type"];
 
         // Check if it's a string or number
-        if (type_field.isString()) {
+        if (type_field.getType() == JsonValue::STRING) {
             std::string type_str = type_field.asString();
             if (type_str == "const_power") {
                 appliance.load_gen_type = LoadGenType::const_pq;

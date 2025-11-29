@@ -349,4 +349,20 @@ void register_solver_comparison_tests(TestRunner& runner) {
         test_solver_comparison_pgm_network("PGM Network 3 (Generic Branch)",
                                            "../data/pgm/network_3.json");
     });
+
+    // ZIP load model tests
+    runner.add_test("Solver Comparison - ZIP Constant Power", []() {
+        test_solver_comparison_pgm_network("ZIP Load (const_pq)",
+                                           "../data/pgm/network_zip_const_pq.json");
+    });
+
+    runner.add_test("Solver Comparison - ZIP Constant Impedance", []() {
+        test_solver_comparison_pgm_network("ZIP Load (const_y)",
+                                           "../data/pgm/network_zip_const_y.json");
+    });
+
+    runner.add_test("Solver Comparison - ZIP Constant Current", []() {
+        test_solver_comparison_pgm_network("ZIP Load (const_i)",
+                                           "../data/pgm/network_zip_const_i.json");
+    });
 }

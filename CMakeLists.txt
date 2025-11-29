@@ -85,6 +85,15 @@ endif()
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
+# Find and enable OpenMP for CPU parallelization
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    message(STATUS "OpenMP found - enabling parallel CPU solvers")
+    add_compile_definitions(GAP_OPENMP_AVAILABLE=1)
+else()
+    message(STATUS "OpenMP not found - CPU solvers will run serially")
+endif()
+
 # Compiler-specific options
 if(MSVC)
     add_compile_options(/W4)

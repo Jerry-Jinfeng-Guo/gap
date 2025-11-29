@@ -35,6 +35,11 @@ if(GAP_ENABLE_CUDA)
     target_compile_options(gap_core PRIVATE -fno-lto)
 endif()
 
+# Link OpenMP if available (needed for CPU solvers)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(gap_core OpenMP::OpenMP_CXX)
+endif()
+
 # IO Module
 add_library(gap_io SHARED
     io/json_io.cpp
@@ -192,6 +197,11 @@ target_link_libraries(gap_powerflow_cpu
     gap_core
     gap_lu_cpu
 )
+
+# Link OpenMP if available for CPU parallelization
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(gap_powerflow_cpu OpenMP::OpenMP_CXX)
+endif()
 
 # GPU Power Flow Solver Backend (only if CUDA is enabled)
 if(GAP_ENABLE_CUDA)

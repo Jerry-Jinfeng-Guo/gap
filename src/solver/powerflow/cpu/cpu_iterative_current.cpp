@@ -5,6 +5,10 @@
 #include <numeric>
 #include <ranges>
 
+#ifdef GAP_OPENMP_AVAILABLE
+#include <omp.h>
+#endif
+
 #include "gap/logging/logger.h"
 #include "gap/solver/powerflow_interface.h"
 
@@ -30,6 +34,15 @@ class CPUIterativeCurrent : public IPowerFlowSolver {
         double total_solve_time = 0.0;
         double total_convergence_time = 0.0;
         int iteration_count = 0;
+    };
+
+    // Convergence diagnostics
+    struct ConvergenceDiagnostics {
+        std::vector<Float> mismatch_history;      // Max mismatch per iteration
+        std::vector<Float> avg_mismatch_history;  // Average mismatch per iteration
+        std::vector<int> slow_buses;              // Buses with slow convergence
+        Float convergence_rate = 0.0;             // Estimated convergence rate
+        bool is_monotonic = true;                 // Whether convergence is monotonic
     };
 
   public:
@@ -90,7 +103,15 @@ class CPUIterativeCurrent : public IPowerFlowSolver {
 
         // Initialize profiling
         ProfilingData profiling;
+        ConvergenceDiagnostics diagnostics;
         auto total_start = std::chrono::high_resolution_clock::now();
+
+#ifdef GAP_OPENMP_AVAILABLE
+        int num_threads = omp_get_max_threads();
+        LOG_INFO(logger, "  OpenMP enabled with", num_threads, "threads");
+#else
+        LOG_INFO(logger, "  OpenMP not available - running serially");
+#endif
 
         // Clear previous iteration states if capturing
         if (capture_states_) {
@@ -143,9 +164,26 @@ class CPUIterativeCurrent : public IPowerFlowSolver {
             auto t5 = std::chrono::high_resolution_clock::now();
             Float max_voltage_change =
                 calculate_max_voltage_change(result.bus_voltages, new_voltages);
+
+            // Calculate average voltage change for diagnostics
+            Float total_change = 0.0;
+            for (int i = 0; i < network_data.num_buses; ++i) {
+                total_change += std::abs(new_voltages[i] - result.bus_voltages[i]);
+            }
+            Float avg_voltage_change = total_change / network_data.num_buses;
+
             auto t6 = std::chrono::high_resolution_clock::now();
             profiling.total_convergence_time +=
                 std::chrono::duration<double, std::milli>(t6 - t5).count();
+
+            // Store convergence diagnostics
+            diagnostics.mismatch_history.push_back(max_voltage_change);
+            diagnostics.avg_mismatch_history.push_back(avg_voltage_change);
+
+            // Check for non-monotonic convergence
+            if (iter > 0 && max_voltage_change > diagnostics.mismatch_history[iter - 1]) {
+                diagnostics.is_monotonic = false;
+            }
 
             result.final_mismatch = max_voltage_change;
 
@@ -186,6 +224,38 @@ class CPUIterativeCurrent : public IPowerFlowSolver {
         auto total_end = std::chrono::high_resolution_clock::now();
         double total_time =
             std::chrono::duration<double, std::milli>(total_end - total_start).count();
+
+        // Print convergence diagnostics
+        if (config.verbose || !result.converged) {
+            LOG_INFO(logger, "\n=== CONVERGENCE DIAGNOSTICS ===");
+            LOG_INFO(logger, "Convergence:", (result.converged ? "YES" : "NO"));
+            LOG_INFO(logger, "Iterations:", result.iterations);
+            LOG_INFO(logger, "Final mismatch:", result.final_mismatch);
+            LOG_INFO(logger, "Monotonic convergence:", (diagnostics.is_monotonic ? "YES" : "NO"));
+
+            // Calculate convergence rate from last few iterations
+            if (diagnostics.mismatch_history.size() >= 3) {
+                size_t n = diagnostics.mismatch_history.size();
+                Float rate =
+                    diagnostics.mismatch_history[n - 1] / diagnostics.mismatch_history[n - 2];
+                diagnostics.convergence_rate = rate;
+                LOG_INFO(logger, "Convergence rate (last iteration):", rate);
+            }
+
+            // Show convergence history for last 5 iterations
+            if (diagnostics.mismatch_history.size() > 0) {
+                LOG_INFO(logger, "Mismatch history (last",
+                         std::min(size_t(5), diagnostics.mismatch_history.size()), "iterations):");
+                size_t start = diagnostics.mismatch_history.size() > 5
+                                   ? diagnostics.mismatch_history.size() - 5
+                                   : 0;
+                for (size_t i = start; i < diagnostics.mismatch_history.size(); ++i) {
+                    LOG_INFO(logger, "  Iter", (i + 1), "- Max:", diagnostics.mismatch_history[i],
+                             "Avg:", diagnostics.avg_mismatch_history[i]);
+                }
+            }
+            LOG_INFO(logger, "================================\n");
+        }
 
         // Print profiling summary
         LOG_INFO(logger, "\n=== PERFORMANCE PROFILING ===");
@@ -334,7 +404,11 @@ class CPUIterativeCurrent : public IPowerFlowSolver {
         // Initialize all currents to zero
         std::fill(currents.begin(), currents.end(), Complex(0.0, 0.0));
 
-        // For each bus, calculate current injection based on bus type
+        // Parallelize the loop over buses using OpenMP
+        // Each bus calculation is independent
+#ifdef GAP_OPENMP_AVAILABLE
+#pragma omp parallel for schedule(static)
+#endif
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
             if (network_data.buses[i].bus_type == BusType::SLACK) {
                 // PGM approach: I_inj = Y_source * U_ref

@@ -357,6 +357,14 @@ struct NetworkData {
 enum class BackendType { CPU, GPU_CUDA /*, GPU_HIP*/ };
 
 /**
+ * @brief Power flow solver method enumeration
+ */
+enum class PowerFlowMethod {
+    NEWTON_RAPHSON,    // Newton-Raphson method (default)
+    ITERATIVE_CURRENT  // Iterative current method
+};
+
+/**
  * @brief Convert BusType enum to string
  */
 inline std::string bus_type_to_string(BusType type) {

@@ -651,10 +651,11 @@ void benchmark_cpu_vs_gpu() {
     }
 
     std::cout << "\nBenchmarking " << benchmark_cases.size() << " test cases\n" << std::endl;
-    std::cout << std::string(130, '=') << std::endl;
-    printf("%-30s %8s %10s %12s %10s %12s %10s %12s %10s\n", "Test Case", "Buses", "PGM Time",
-           "CPU Time", "CPU Iters", "GPU Time", "GPU Iters", "Speedup", "Match");
-    std::cout << std::string(130, '-') << std::endl;
+    std::cout << std::string(170, '=') << std::endl;
+    printf("%-30s %8s %10s %12s %10s %12s %10s %12s %10s %12s %10s\n", "Test Case", "Buses",
+           "PGM Time", "CPU_NR Time", "NR Iters", "CPU_IC Time", "IC Iters", "GPU Time",
+           "GPU Iters", "IC Speedup", "Match");
+    std::cout << std::string(170, '-') << std::endl;
 
     bool gpu_available = core::BackendFactory::is_backend_available(BackendType::GPU_CUDA);
     if (!gpu_available) {
@@ -665,11 +666,15 @@ void benchmark_cpu_vs_gpu() {
         std::string name;
         int num_buses;
         double pgm_time_ms;
-        double cpu_time_ms;
-        int cpu_iterations;
+        double cpu_nr_time_ms;
+        int cpu_nr_iterations;
+        double cpu_ic_time_ms;
+        int cpu_ic_iterations;
         double gpu_time_ms;
         int gpu_iterations;
-        bool results_match;
+        bool gpu_vs_nr_match;
+        bool ic_vs_nr_match;
+        double ic_max_voltage_error;
     };
 
     std::vector<BenchmarkResult> results;
@@ -700,6 +705,10 @@ void benchmark_cpu_vs_gpu() {
         // Read PGM reference calculation time from output.json
         std::string output_path = test_data_dir + "/" + test_case + "/output.json";
         bench_result.pgm_time_ms = -1.0;  // Default if not found
+        bench_result.cpu_ic_time_ms = -1.0;
+        bench_result.cpu_ic_iterations = 0;
+        bench_result.ic_vs_nr_match = false;
+        bench_result.ic_max_voltage_error = 0.0;
         if (fs::exists(output_path)) {
             std::ifstream output_file(output_path);
             std::string line;
@@ -736,36 +745,76 @@ void benchmark_cpu_vs_gpu() {
         config.max_iterations = 100;
         config.verbose = false;
 
-        // === CPU Benchmark ===
+        // === CPU Newton-Raphson Benchmark ===
         auto cpu_admittance = core::BackendFactory::create_admittance_backend(BackendType::CPU);
         auto cpu_matrix = cpu_admittance->build_admittance_matrix(network);
 
-        auto cpu_pf_solver = core::BackendFactory::create_powerflow_solver(BackendType::CPU);
-        auto cpu_lu_solver = core::BackendFactory::create_lu_solver(BackendType::CPU);
-        cpu_pf_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(cpu_lu_solver.release()));
+        auto cpu_nr_solver = core::BackendFactory::create_powerflow_solver(
+            BackendType::CPU, PowerFlowMethod::NEWTON_RAPHSON);
+        auto cpu_nr_lu = core::BackendFactory::create_lu_solver(BackendType::CPU);
+        cpu_nr_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(cpu_nr_lu.release()));
 
         // Warmup run
-        auto warmup = cpu_pf_solver->solve_power_flow(network, *cpu_matrix, config);
+        auto warmup = cpu_nr_solver->solve_power_flow(network, *cpu_matrix, config);
         if (!warmup.converged) {
-            std::cerr << "CPU solver failed to converge for " << test_case << std::endl;
+            std::cerr << "CPU NR solver failed to converge for " << test_case << std::endl;
             continue;
         }
 
         // Timed runs (average of 3)
         const int num_runs_inner = num_runs;
-        double total_cpu_time = 0.0;
-        solver::PowerFlowResult cpu_result;
+        double total_cpu_nr_time = 0.0;
+        solver::PowerFlowResult cpu_nr_result;
 
         for (int run = 0; run < num_runs_inner; ++run) {
             auto start = std::chrono::high_resolution_clock::now();
-            cpu_result = cpu_pf_solver->solve_power_flow(network, *cpu_matrix, config);
+            cpu_nr_result = cpu_nr_solver->solve_power_flow(network, *cpu_matrix, config);
             auto end = std::chrono::high_resolution_clock::now();
 
-            total_cpu_time += std::chrono::duration<double, std::milli>(end - start).count();
+            total_cpu_nr_time += std::chrono::duration<double, std::milli>(end - start).count();
         }
 
-        bench_result.cpu_time_ms = total_cpu_time / num_runs_inner;
-        bench_result.cpu_iterations = cpu_result.iterations;
+        bench_result.cpu_nr_time_ms = total_cpu_nr_time / num_runs_inner;
+        bench_result.cpu_nr_iterations = cpu_nr_result.iterations;
+
+        // === CPU Iterative Current Benchmark ===
+        auto cpu_ic_solver = core::BackendFactory::create_powerflow_solver(
+            BackendType::CPU, PowerFlowMethod::ITERATIVE_CURRENT);
+        auto cpu_ic_lu = core::BackendFactory::create_lu_solver(BackendType::CPU);
+        cpu_ic_solver->set_lu_solver(std::shared_ptr<solver::ILUSolver>(cpu_ic_lu.release()));
+
+        // Warmup run
+        auto ic_warmup = cpu_ic_solver->solve_power_flow(network, *cpu_matrix, config);
+        if (!ic_warmup.converged) {
+            std::cerr << "CPU IC solver failed to converge for " << test_case << std::endl;
+            // Don't skip - just mark IC as unavailable for this case
+            bench_result.cpu_ic_time_ms = -1.0;
+        } else {
+            // Timed runs (average of 3)
+            double total_cpu_ic_time = 0.0;
+            solver::PowerFlowResult cpu_ic_result;
+
+            for (int run = 0; run < num_runs_inner; ++run) {
+                auto start = std::chrono::high_resolution_clock::now();
+                cpu_ic_result = cpu_ic_solver->solve_power_flow(network, *cpu_matrix, config);
+                auto end = std::chrono::high_resolution_clock::now();
+
+                total_cpu_ic_time += std::chrono::duration<double, std::milli>(end - start).count();
+            }
+
+            bench_result.cpu_ic_time_ms = total_cpu_ic_time / num_runs_inner;
+            bench_result.cpu_ic_iterations = cpu_ic_result.iterations;
+
+            // Compare IC vs NR accuracy
+            Float max_diff = 0.0;
+            for (size_t i = 0; i < cpu_nr_result.bus_voltages.size(); ++i) {
+                Float diff = std::abs(std::abs(cpu_ic_result.bus_voltages[i]) -
+                                      std::abs(cpu_nr_result.bus_voltages[i]));
+                max_diff = std::max(max_diff, diff);
+            }
+            bench_result.ic_max_voltage_error = max_diff;
+            bench_result.ic_vs_nr_match = (max_diff < 1e-4);  // 0.01% tolerance
+        }
 
         // === GPU Benchmark ===
         if (gpu_available) {
@@ -785,7 +834,7 @@ void benchmark_cpu_vs_gpu() {
                 std::cerr << "GPU solver failed to converge for " << test_case << std::endl;
                 bench_result.gpu_time_ms = -1.0;
                 bench_result.gpu_iterations = 0;
-                bench_result.results_match = false;
+                bench_result.gpu_vs_nr_match = false;
             } else {
                 // Timed runs (average of 3)
                 double total_gpu_time = 0.0;
@@ -803,93 +852,140 @@ void benchmark_cpu_vs_gpu() {
                 bench_result.gpu_time_ms = total_gpu_time / num_runs_inner;
                 bench_result.gpu_iterations = gpu_result.iterations;
 
-                // Check if results match
+                // Check if GPU results match CPU NR
                 Float max_diff = 0.0;
-                for (size_t i = 0; i < cpu_result.bus_voltages.size(); ++i) {
-                    Float diff = std::abs(std::abs(cpu_result.bus_voltages[i]) -
+                for (size_t i = 0; i < cpu_nr_result.bus_voltages.size(); ++i) {
+                    Float diff = std::abs(std::abs(cpu_nr_result.bus_voltages[i]) -
                                           std::abs(gpu_result.bus_voltages[i]));
                     max_diff = std::max(max_diff, diff);
                 }
-                bench_result.results_match = (max_diff < 1e-6);
+                bench_result.gpu_vs_nr_match = (max_diff < 1e-6);
             }
         } else {
             bench_result.gpu_time_ms = -1.0;
             bench_result.gpu_iterations = 0;
-            bench_result.results_match = false;
+            bench_result.gpu_vs_nr_match = false;
         }
 
         results.push_back(bench_result);
 
         // Print result
-        if (bench_result.gpu_time_ms > 0) {
-            double speedup = bench_result.cpu_time_ms / bench_result.gpu_time_ms;
-            if (bench_result.pgm_time_ms > 0) {
-                printf("%-30s %8d %10.3f ms %10.3f ms %12d %10.3f ms %12d %11.2fx %10s\n",
-                       bench_result.name.c_str(), bench_result.num_buses, bench_result.pgm_time_ms,
-                       bench_result.cpu_time_ms, bench_result.cpu_iterations,
-                       bench_result.gpu_time_ms, bench_result.gpu_iterations, speedup,
-                       bench_result.results_match ? "✓" : "✗");
-            } else {
-                printf("%-30s %8d %10s %10.3f ms %12d %10.3f ms %12d %11.2fx %10s\n",
-                       bench_result.name.c_str(), bench_result.num_buses, "N/A",
-                       bench_result.cpu_time_ms, bench_result.cpu_iterations,
-                       bench_result.gpu_time_ms, bench_result.gpu_iterations, speedup,
-                       bench_result.results_match ? "✓" : "✗");
-            }
+        double ic_speedup = (bench_result.cpu_ic_time_ms > 0)
+                                ? (bench_result.cpu_nr_time_ms / bench_result.cpu_ic_time_ms)
+                                : 0.0;
+
+        std::string match_str = "";
+        if (bench_result.gpu_time_ms > 0 && bench_result.cpu_ic_time_ms > 0) {
+            match_str = (bench_result.gpu_vs_nr_match && bench_result.ic_vs_nr_match) ? "✓" : "✗";
+        } else if (bench_result.cpu_ic_time_ms > 0) {
+            match_str = bench_result.ic_vs_nr_match ? "✓" : "✗";
+        } else if (bench_result.gpu_time_ms > 0) {
+            match_str = bench_result.gpu_vs_nr_match ? "✓" : "✗";
         } else {
-            if (bench_result.pgm_time_ms > 0) {
-                printf("%-30s %8d %10.3f ms %10.3f ms %12d %10s %12s %12s %10s\n",
-                       bench_result.name.c_str(), bench_result.num_buses, bench_result.pgm_time_ms,
-                       bench_result.cpu_time_ms, bench_result.cpu_iterations, "N/A", "N/A", "N/A",
-                       "N/A");
-            } else {
-                printf("%-30s %8d %10s %10.3f ms %12d %10s %12s %12s %10s\n",
-                       bench_result.name.c_str(), bench_result.num_buses, "N/A",
-                       bench_result.cpu_time_ms, bench_result.cpu_iterations, "N/A", "N/A", "N/A",
-                       "N/A");
-            }
+            match_str = "N/A";
+        }
+
+        if (bench_result.pgm_time_ms > 0) {
+            printf(
+                "%-30s %8d %10.3f ms %12.3f ms %10d %12.3f ms %10d %12.3f ms %10d %11.2fx %10s\n",
+                bench_result.name.c_str(), bench_result.num_buses, bench_result.pgm_time_ms,
+                bench_result.cpu_nr_time_ms, bench_result.cpu_nr_iterations,
+                bench_result.cpu_ic_time_ms > 0 ? bench_result.cpu_ic_time_ms : 0.0,
+                bench_result.cpu_ic_iterations,
+                bench_result.gpu_time_ms > 0 ? bench_result.gpu_time_ms : 0.0,
+                bench_result.gpu_iterations, ic_speedup, match_str.c_str());
+        } else {
+            printf("%-30s %8d %10s %12.3f ms %10d %12.3f ms %10d %12.3f ms %10d %11.2fx %10s\n",
+                   bench_result.name.c_str(), bench_result.num_buses, "N/A",
+                   bench_result.cpu_nr_time_ms, bench_result.cpu_nr_iterations,
+                   bench_result.cpu_ic_time_ms > 0 ? bench_result.cpu_ic_time_ms : 0.0,
+                   bench_result.cpu_ic_iterations,
+                   bench_result.gpu_time_ms > 0 ? bench_result.gpu_time_ms : 0.0,
+                   bench_result.gpu_iterations, ic_speedup, match_str.c_str());
         }
     }
 
-    std::cout << std::string(130, '=') << std::endl;
+    std::cout << std::string(170, '=') << std::endl;
 
     // Summary statistics
-    if (gpu_available && !results.empty()) {
-        double total_speedup = 0.0;
-        int speedup_count = 0;
-        int crossover_buses = -1;
+    if (!results.empty()) {
+        double total_gpu_speedup = 0.0;
+        double total_ic_speedup = 0.0;
+        int gpu_speedup_count = 0;
+        int ic_speedup_count = 0;
+        int gpu_crossover_buses = -1;
+        double max_ic_speedup = 0.0;
+        int max_ic_speedup_buses = 0;
 
         for (const auto& result : results) {
             if (result.gpu_time_ms > 0) {
-                double speedup = result.cpu_time_ms / result.gpu_time_ms;
-                total_speedup += speedup;
-                speedup_count++;
+                double speedup = result.cpu_nr_time_ms / result.gpu_time_ms;
+                total_gpu_speedup += speedup;
+                gpu_speedup_count++;
 
                 // Find crossover point where GPU becomes faster
-                if (crossover_buses == -1 && speedup > 1.0) {
-                    crossover_buses = result.num_buses;
+                if (gpu_crossover_buses == -1 && speedup > 1.0) {
+                    gpu_crossover_buses = result.num_buses;
+                }
+            }
+
+            if (result.cpu_ic_time_ms > 0) {
+                double ic_speedup = result.cpu_nr_time_ms / result.cpu_ic_time_ms;
+                total_ic_speedup += ic_speedup;
+                ic_speedup_count++;
+
+                if (ic_speedup > max_ic_speedup) {
+                    max_ic_speedup = ic_speedup;
+                    max_ic_speedup_buses = result.num_buses;
                 }
             }
         }
 
-        std::cout << "\nSummary:" << std::endl;
-        std::cout << "  Average speedup: " << (total_speedup / speedup_count) << "x" << std::endl;
-        if (crossover_buses > 0) {
-            std::cout << "  GPU becomes faster at: ~" << crossover_buses << " buses" << std::endl;
-        } else {
-            std::cout << "  GPU overhead dominates for all tested sizes" << std::endl;
+        std::cout << "\n=== PERFORMANCE SUMMARY ===" << std::endl;
+
+        if (ic_speedup_count > 0) {
+            std::cout << "\n📊 Iterative Current (IC) vs Newton-Raphson (NR):" << std::endl;
+            std::cout << "  Average speedup: " << std::fixed << std::setprecision(2)
+                      << (total_ic_speedup / ic_speedup_count) << "x faster" << std::endl;
+            std::cout << "  Maximum speedup: " << max_ic_speedup << "x at " << max_ic_speedup_buses
+                      << " buses" << std::endl;
+
+            // Check IC accuracy
+            bool all_ic_match = true;
+            double max_ic_error = 0.0;
+            for (const auto& result : results) {
+                if (result.cpu_ic_time_ms > 0) {
+                    if (!result.ic_vs_nr_match) all_ic_match = false;
+                    max_ic_error = std::max(max_ic_error, result.ic_max_voltage_error);
+                }
+            }
+            std::cout << "  Accuracy: "
+                      << (all_ic_match ? "All tests match NR ✓" : "Some differences")
+                      << " (max error: " << std::scientific << max_ic_error << " pu)" << std::endl;
         }
 
-        // Check if all results match
-        bool all_match = true;
-        for (const auto& result : results) {
-            if (result.gpu_time_ms > 0 && !result.results_match) {
-                all_match = false;
-                break;
+        if (gpu_available && gpu_speedup_count > 0) {
+            std::cout << "\n📊 GPU vs CPU (Newton-Raphson):" << std::endl;
+            std::cout << "  Average speedup: " << std::fixed << std::setprecision(2)
+                      << (total_gpu_speedup / gpu_speedup_count) << "x" << std::endl;
+            if (gpu_crossover_buses > 0) {
+                std::cout << "  GPU becomes faster at: ~" << gpu_crossover_buses << " buses"
+                          << std::endl;
+            } else {
+                std::cout << "  GPU overhead dominates for all tested sizes" << std::endl;
             }
+
+            // Check if all GPU results match
+            bool all_gpu_match = true;
+            for (const auto& result : results) {
+                if (result.gpu_time_ms > 0 && !result.gpu_vs_nr_match) {
+                    all_gpu_match = false;
+                    break;
+                }
+            }
+            std::cout << "  GPU accuracy: "
+                      << (all_gpu_match ? "All match CPU ✓" : "Some mismatches ✗") << std::endl;
         }
-        std::cout << "  Result accuracy: " << (all_match ? "All match ✓" : "Some mismatches ✗")
-                  << std::endl;
     }
 
     std::cout << "\nNotes:" << std::endl;

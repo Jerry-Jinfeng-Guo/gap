@@ -13,6 +13,9 @@ void register_lu_solver_validation_tests(TestRunner& runner);
 // Forward declaration for PGM GPU validation tests
 void register_pgm_gpu_validation_tests(TestRunner& runner);
 
+// Forward declaration for solver comparison tests
+void register_solver_comparison_tests(TestRunner& runner);
+
 /**
  * @brief Backend comparison test - CPU vs GPU
  */
@@ -143,4 +146,7 @@ void register_validation_tests(TestRunner& runner) {
 
     // Register PGM GPU validation tests
     register_pgm_gpu_validation_tests(runner);
+
+    // Register solver comparison tests (NR vs IC)
+    register_solver_comparison_tests(runner);
 }

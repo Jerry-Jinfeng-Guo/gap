@@ -5,6 +5,7 @@ add_executable(gap_unit_tests
     unit/test_admittance.cpp
     unit/test_lu_solver.cpp
     unit/test_powerflow.cpp
+    unit/test_iterative_current.cpp
     unit/test_newton_raphson_functions.cpp
     unit/test_pgm_io.cpp
 )
@@ -27,6 +28,7 @@ add_executable(gap_validation_tests
     validation/ieee_test_cases.cpp
     validation/lu_solver_validation.cpp
     validation/pgm_gpu_validation.cpp
+    validation/solver_comparison.cpp
 )
 
 target_include_directories(gap_validation_tests PUBLIC
@@ -52,7 +54,7 @@ endif()
 
 # Add tests to CTest
 add_test(NAME UnitTests COMMAND gap_unit_tests)
-add_test(NAME ValidationTests COMMAND gap_validation_tests)
+add_test(NAME ValidationTests COMMAND gap_validation_tests WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
 # Python validation tests using pytest
 find_program(PYTEST_EXECUTABLE pytest)

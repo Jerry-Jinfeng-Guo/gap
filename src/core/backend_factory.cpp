@@ -14,6 +14,7 @@
 #include "../admittance/cpu/cpu_admittance_matrix.cpp"
 #include "../io/json_io.cpp"
 #include "../solver/lu/cpu/cpu_lu_solver.cpp"
+#include "../solver/powerflow/cpu/cpu_iterative_current.cpp"
 #include "../solver/powerflow/cpu/cpu_newton_raphson.cpp"
 
 namespace gap::core {
@@ -72,27 +73,47 @@ std::unique_ptr<solver::ILUSolver> BackendFactory::create_lu_solver(BackendType 
 }
 
 std::unique_ptr<solver::IPowerFlowSolver> BackendFactory::create_powerflow_solver(
-    BackendType backend_type) {
-    switch (backend_type) {
-        case BackendType::CPU:
-            return std::make_unique<solver::CPUNewtonRaphson>();
+    BackendType backend_type, PowerFlowMethod method) {
+    // Handle Newton-Raphson method
+    if (method == PowerFlowMethod::NEWTON_RAPHSON) {
+        switch (backend_type) {
+            case BackendType::CPU:
+                return std::make_unique<solver::CPUNewtonRaphson>();
 
-        case BackendType::GPU_CUDA: {
-            // Try to load GPU backend dynamically
-            void* handle = load_backend_library("libgap_powerflow_gpu.so");
-            if (handle) {
-                typedef solver::IPowerFlowSolver* (*CreateFunc)();
-                CreateFunc create_func = (CreateFunc)dlsym(handle, "create_gpu_powerflow_solver");
-                if (create_func) {
-                    return std::unique_ptr<solver::IPowerFlowSolver>(create_func());
+            case BackendType::GPU_CUDA: {
+                // Try to load GPU backend dynamically
+                void* handle = load_backend_library("libgap_powerflow_gpu.so");
+                if (handle) {
+                    typedef solver::IPowerFlowSolver* (*CreateFunc)();
+                    CreateFunc create_func =
+                        (CreateFunc)dlsym(handle, "create_gpu_powerflow_solver");
+                    if (create_func) {
+                        return std::unique_ptr<solver::IPowerFlowSolver>(create_func());
+                    }
                 }
+                throw std::runtime_error("GPU power flow solver backend not available");
             }
-            throw std::runtime_error("GPU power flow solver backend not available");
-        }
 
-        default:
-            throw std::invalid_argument("Unknown backend type");
+            default:
+                throw std::invalid_argument("Unknown backend type");
+        }
     }
+
+    // Handle Iterative Current method
+    else if (method == PowerFlowMethod::ITERATIVE_CURRENT) {
+        switch (backend_type) {
+            case BackendType::CPU:
+                return std::make_unique<solver::CPUIterativeCurrent>();
+
+            case BackendType::GPU_CUDA:
+                throw std::runtime_error("GPU iterative current solver not yet implemented");
+
+            default:
+                throw std::invalid_argument("Unknown backend type");
+        }
+    }
+
+    throw std::invalid_argument("Unknown power flow method");
 }
 
 bool BackendFactory::is_backend_available(BackendType backend_type) {

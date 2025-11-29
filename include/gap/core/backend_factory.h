@@ -39,10 +39,11 @@ class BackendFactory {
     /**
      * @brief Create power flow solver backend
      * @param backend_type Type of backend (CPU or GPU)
+     * @param method Power flow solution method (default: Newton-Raphson)
      * @return Unique pointer to power flow solver implementation
      */
     static std::unique_ptr<solver::IPowerFlowSolver> create_powerflow_solver(
-        BackendType backend_type);
+        BackendType backend_type, PowerFlowMethod method = PowerFlowMethod::NEWTON_RAPHSON);
 
     /**
      * @brief Check if backend type is available

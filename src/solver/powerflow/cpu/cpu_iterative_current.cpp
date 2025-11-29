@@ -320,10 +320,11 @@ class CPUIterativeCurrent : public IPowerFlowSolver {
 
     /**
      * @brief Calculate current injections from specified powers and voltages
-     * Matches PGM implementation:
+     * Matches PGM implementation supporting ZIP load model:
+     * - const_pq: I = conj(S / V) - Constant power
+     * - const_y:  I = conj(S) * V - Constant impedance
+     * - const_i:  I = conj(S * |V| / V) - Constant current
      * - For sources (slack): I = Y_source * U_ref
-     * - For loads (PQ): I = conj(S / V)
-     * - For PV: I = conj(S / V) (reactive power adjusts automatically)
      */
     void calculate_current_injections(NetworkData const& network_data,
                                       ComplexVector const& voltages, ComplexVector& currents,
@@ -344,8 +345,7 @@ class CPUIterativeCurrent : public IPowerFlowSolver {
                 continue;
             }
 
-            // For PQ and PV buses: calculate current from specified power
-            // PGM: rhs_u_[bus_number] += conj(input.s_injection[load_number] / u[bus_number])
+            // Get specified power for this bus (from appliances + direct bus specification)
             Complex specified_power = get_specified_power_at_bus(network_data, i, base_power);
 
             // Skip if no power specified (zero injection bus)
@@ -354,7 +354,19 @@ class CPUIterativeCurrent : public IPowerFlowSolver {
                 continue;
             }
 
-            // Current injection for constant power: I = conj(S / V)
+            // Determine load type from connected appliances
+            // Default to constant power if no appliance specifies otherwise
+            LoadGenType load_type = LoadGenType::const_pq;
+            int bus_id = network_data.buses[i].id;
+
+            for (auto const& appliance : network_data.appliances) {
+                if (appliance.node == bus_id && appliance.status == 1 &&
+                    appliance.type == ApplianceType::LOADGEN) {
+                    load_type = appliance.load_gen_type;
+                    break;  // Use first matching appliance's type
+                }
+            }
+
             Complex voltage = voltages[i];
 
             // Avoid division by zero
@@ -364,7 +376,27 @@ class CPUIterativeCurrent : public IPowerFlowSolver {
                 voltage = Complex(1e-10, 0.0);
             }
 
-            currents[i] = std::conj(specified_power / voltage);
+            // Calculate current based on ZIP load model
+            // PGM formulas from iterative_current_pf_solver.hpp
+            switch (load_type) {
+                case LoadGenType::const_pq:
+                    // Constant power: I = conj(S / V)
+                    currents[i] = std::conj(specified_power / voltage);
+                    break;
+
+                case LoadGenType::const_y:
+                    // Constant impedance: I = conj(S * V^2 / V) = conj(S) * V
+                    // At rated voltage: I = conj(S_rated / V_rated)
+                    // At actual voltage: I = conj(S_rated) * V
+                    currents[i] = std::conj(specified_power) * voltage;
+                    break;
+
+                case LoadGenType::const_i:
+                    // Constant current: I = conj(S * |V| / V)
+                    // Maintains constant current magnitude
+                    currents[i] = std::conj(specified_power * std::abs(voltage) / voltage);
+                    break;
+            }
         }
     }
 

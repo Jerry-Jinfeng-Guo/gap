@@ -44,6 +44,20 @@ enum class ApplianceType {
 };
 
 /**
+ * @brief Load/generator type for ZIP load model
+ *
+ * ZIP model represents load as combination of:
+ * - Z (Constant Impedance): P/Q proportional to V²
+ * - I (Constant Current): P/Q proportional to V
+ * - P (Constant Power): P/Q independent of V
+ */
+enum class LoadGenType {
+    const_pq = 0,  // Constant power (default) - most common
+    const_y = 1,   // Constant admittance/impedance - Y=G+jB
+    const_i = 2    // Constant current magnitude
+};
+
+/**
  * @brief Branch type enumeration for power system analysis
  *
  */
@@ -303,6 +317,7 @@ struct ApplianceData {
     // LOADGEN parameters
     Float p_specified{0.0};  // Specified active power (W) - for loads/generators
     Float q_specified{0.0};  // Specified reactive power (VAr) - for loads/generators
+    LoadGenType load_gen_type{LoadGenType::const_pq};  // Load model type (ZIP model)
 
     // SHUNT parameters
     Float g1{0.0};  // Positive-sequence conductance (S) - for shunts

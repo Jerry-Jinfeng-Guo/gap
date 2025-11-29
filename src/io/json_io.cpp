@@ -207,6 +207,48 @@ ApplianceData convertPgmLoad(JsonValue const& pgm_load) {
         appliance.q_specified = pgm_load["q_specified"].asNumber();
     }
 
+    // ZIP load model type (optional field)
+    // PGM standard uses string values: "const_power", "const_impedance", "const_current"
+    // Also support legacy numeric format: 0 (const_pq), 1 (const_y), 2 (const_i)
+    if (pgm_load.contains("type")) {
+        auto const& type_field = pgm_load["type"];
+
+        // Check if it's a string or number
+        if (type_field.isString()) {
+            std::string type_str = type_field.asString();
+            if (type_str == "const_power") {
+                appliance.load_gen_type = LoadGenType::const_pq;
+            } else if (type_str == "const_impedance") {
+                appliance.load_gen_type = LoadGenType::const_y;
+            } else if (type_str == "const_current") {
+                appliance.load_gen_type = LoadGenType::const_i;
+            } else {
+                // Unknown string type - default to const_pq
+                appliance.load_gen_type = LoadGenType::const_pq;
+            }
+        } else {
+            // Numeric format (legacy/simplified)
+            int type_value = static_cast<int>(type_field.asNumber());
+            switch (type_value) {
+                case 0:
+                    appliance.load_gen_type = LoadGenType::const_pq;
+                    break;
+                case 1:
+                    appliance.load_gen_type = LoadGenType::const_y;
+                    break;
+                case 2:
+                    appliance.load_gen_type = LoadGenType::const_i;
+                    break;
+                default:
+                    // Unknown numeric type - default to const_pq
+                    appliance.load_gen_type = LoadGenType::const_pq;
+            }
+        }
+    } else {
+        // No type specified - default to constant power
+        appliance.load_gen_type = LoadGenType::const_pq;
+    }
+
     return appliance;
 }
 

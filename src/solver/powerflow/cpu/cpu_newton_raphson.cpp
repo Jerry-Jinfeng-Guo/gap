@@ -258,7 +258,8 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             first_call = false;
             LOG_INFO(logger, "  === Power injection debug (per-unit) ===");
             for (size_t i = 0; i < network_data.buses.size(); ++i) {
-                auto specified = get_specified_power_at_bus(network_data, i, base_power);
+                auto specified =
+                    get_specified_power_at_bus(network_data, i, bus_voltages, base_power);
                 LOG_INFO(logger, "    Bus", (i + 1), "- Calculated:", calculated_powers[i].real(),
                          "pu,", calculated_powers[i].imag(), "pu | Specified:", specified.real(),
                          "pu,", specified.imag(), "pu");
@@ -273,7 +274,9 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
             }
 
             // Get specified power from appliances connected to this bus (in per-unit)
-            auto specified_power = get_specified_power_at_bus(network_data, i, base_power);
+            // For ZIP loads, this adjusts power based on current voltage
+            auto specified_power =
+                get_specified_power_at_bus(network_data, i, bus_voltages, base_power);
 
             // P mismatch: ΔP_i = P_calculated - P_specified (Newton-Raphson standard convention)
             Float p_mismatch = calculated_powers[i].real() - specified_power.real();
@@ -338,15 +341,36 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
 
     /**
      * @brief Get specified power injection at a bus from connected appliances and bus data
+     * Supports ZIP load model:
+     * - const_pq: S(V) = S_rated (constant power)
+     * - const_y:  S(V) = S_rated * |V|^2 (constant impedance)
+     * - const_i:  S(V) = S_rated * |V| (constant current)
+     *
      * @param network_data Network data with bus and appliance information
      * @param bus_idx Bus index
+     * @param bus_voltages Current voltage vector (needed for const_y and const_i)
      * @param base_power Base power for per-unit conversion (VA)
      * @return Specified power in per-unit (if base_power provided) or absolute (if 0)
      */
     Complex get_specified_power_at_bus(NetworkData const& network_data, size_t bus_idx,
+                                       ComplexVector const& bus_voltages,
                                        Float base_power = 0.0) const {
         Complex specified_power(0.0, 0.0);
         int bus_id = network_data.buses[bus_idx].id;
+
+        // Get load type - default to constant power
+        LoadGenType load_type = LoadGenType::const_pq;
+        bool has_loadgen = false;
+
+        // Check appliances for load type
+        for (auto const& appliance : network_data.appliances) {
+            if (appliance.node == bus_id && appliance.status == 1 &&
+                appliance.type == ApplianceType::LOADGEN) {
+                load_type = appliance.load_gen_type;
+                has_loadgen = true;
+                break;  // Use first LOADGEN appliance's type
+            }
+        }
 
         // First, check if power is specified directly on the bus (e.g., from Python bindings)
         // This takes priority as it's the simplified interface
@@ -371,6 +395,33 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
         // Convert to per-unit if base_power is provided
         if (base_power > 0.0) {
             specified_power /= base_power;
+        }
+
+        // Apply ZIP model scaling based on voltage
+        // PGM formulas from newton_raphson_pf_solver.hpp
+        if (has_loadgen && std::abs(specified_power) > 1e-14) {
+            Complex voltage = bus_voltages[bus_idx];
+            Float voltage_mag = std::abs(voltage);
+
+            switch (load_type) {
+                case LoadGenType::const_pq:
+                    // No scaling - power is constant
+                    break;
+
+                case LoadGenType::const_y:
+                    // Constant impedance: S(V) = S_rated * |V|^2
+                    // At rated voltage (1.0 pu): S = S_rated
+                    // At actual voltage: S = S_rated * |V|^2
+                    specified_power *= (voltage_mag * voltage_mag);
+                    break;
+
+                case LoadGenType::const_i:
+                    // Constant current: S(V) = S_rated * |V|
+                    // At rated voltage (1.0 pu): S = S_rated
+                    // At actual voltage: S = S_rated * |V|
+                    specified_power *= voltage_mag;
+                    break;
+            }
         }
 
         return specified_power;

@@ -1,7 +1,7 @@
 """
 PGM Grid Generator for GAP NRPF Validation
 
-This module adapts the Power Grid Model benchmark grid generation tools 
+This module adapts the Power Grid Model benchmark grid generation tools
 for use with the GAP Newton-Raphson Power Flow solver validation.
 
 Based on generate_fictional_grid_pgm_tpf from:

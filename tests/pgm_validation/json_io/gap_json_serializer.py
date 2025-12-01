@@ -1,7 +1,7 @@
 """
 JSON Output Serializer for GAP NRPF Results
 
-This module serializes GAP Newton-Raphson power flow results to 
+This module serializes GAP Newton-Raphson power flow results to
 Power Grid Model JSON format for benchmark comparison.
 """
 

@@ -1,6 +1,7 @@
 """
 Simple test to verify GAP solver with bus power data
 """
+
 from pathlib import Path
 import sys
 

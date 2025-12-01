@@ -13,22 +13,39 @@
   "frequency": 50.0,
   "total_load_mw": 0.13,
   "base_power_va": 10000000.0,
-  "seed": 42,
+  "seed": 444,
+  "batch_scenarios": {
+    "n_scenarios": 10,
+    "load_variation_range": [
+      0.5,
+      1.5
+    ],
+    "description": "Load profiles from 50% to 150% of base case"
+  },
   "notes": [
     "Automatically generated test case",
     "Loads are 150-200 kW per bus",
-    "Power factor: 0.95 lagging"
+    "Power factor: 0.95 lagging",
+    "Includes 10 load profile scenarios for batch validation"
   ],
   "validation_criteria": {
     "voltage_magnitude_tolerance_pu": 0.0001,
     "convergence_required": true
   },
   "pgm_reference": {
-    "converged": true,
-    "calculation_time_s": 0.0013644695281982422,
-    "iterations": null,
-    "method": "newton_raphson",
-    "tolerance": 1e-08,
-    "max_iterations": 20
+    "base_case": {
+      "converged": true,
+      "calculation_time_s": 0.008856534957885742,
+      "iterations": null,
+      "method": "newton_raphson",
+      "tolerance": 1e-08,
+      "max_iterations": 20
+    },
+    "batch": {
+      "n_scenarios": 10,
+      "total_time_s": 0.0006196498870849609,
+      "avg_time_per_scenario_s": 6.196498870849609e-05,
+      "speedup_vs_sequential": "N/A"
+    }
   }
 }

@@ -18,7 +18,8 @@ void launch_calculate_current_injections(int const* d_row_ptr, int const* d_col_
 void launch_calculate_power_mismatches(cuDoubleComplex const* d_voltages,
                                        cuDoubleComplex const* d_currents,
                                        cuDoubleComplex const* d_specified_power,
-                                       int const* d_bus_types, double* d_mismatches, int num_buses,
+                                       int const* d_bus_types, int const* d_load_types,
+                                       double* d_mismatches, int num_buses,
                                        int* d_mismatch_indices);
 
 /**

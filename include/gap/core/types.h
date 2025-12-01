@@ -151,11 +151,12 @@ struct GPUPowerFlowData {
 #ifdef __CUDACC__
     // Device vectors
     cuDoubleComplex* d_voltages{nullptr};          // Bus voltage phasors
-    cuDoubleComplex* d_power_injections{nullptr};  // S_specified = P + jQ
+    cuDoubleComplex* d_power_injections{nullptr};  // S_specified = P + jQ (rated values)
     double* d_mismatches{nullptr};                 // Power mismatches (P and Q)
     cuDoubleComplex* d_rhs{nullptr};               // RHS for linear system
     cuDoubleComplex* d_solution{nullptr};          // Solution delta V
     int* d_bus_types{nullptr};                     // Bus type array
+    int* d_load_types{nullptr};                    // Load model type array (ZIP model)
 #else
     void* d_voltages{nullptr};
     void* d_power_injections{nullptr};
@@ -163,6 +164,7 @@ struct GPUPowerFlowData {
     void* d_rhs{nullptr};
     void* d_solution{nullptr};
     void* d_bus_types{nullptr};
+    void* d_load_types{nullptr};
 #endif
 
     // Dimensions

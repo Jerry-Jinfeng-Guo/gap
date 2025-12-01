@@ -35,6 +35,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
     int* d_angle_var_idx_ = nullptr;     // bus_id -> angle variable index in Jacobian
     int* d_mag_var_idx_ = nullptr;       // bus_id -> magnitude variable index in Jacobian
     double* d_specified_magnitudes_ = nullptr;
+    int* d_load_types_ = nullptr;  // Load model types (ZIP model: 0=const_pq, 1=const_y, 2=const_i)
     cuDoubleComplex* d_currents_ = nullptr;  // Current injections buffer
     cuDoubleComplex* d_powers_ = nullptr;    // Power injections S = V * conj(I)
     double* d_jacobian_ = nullptr;           // Jacobian matrix (dense, row-major)
@@ -71,6 +72,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         if (d_angle_var_idx_) cudaFree(d_angle_var_idx_);
         if (d_mag_var_idx_) cudaFree(d_mag_var_idx_);
         if (d_specified_magnitudes_) cudaFree(d_specified_magnitudes_);
+        if (d_load_types_) cudaFree(d_load_types_);
         if (d_currents_) cudaFree(d_currents_);
         if (d_powers_) cudaFree(d_powers_);
         if (d_jacobian_) cudaFree(d_jacobian_);
@@ -81,6 +83,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         d_angle_var_idx_ = nullptr;
         d_mag_var_idx_ = nullptr;
         d_specified_magnitudes_ = nullptr;
+        d_load_types_ = nullptr;
         d_currents_ = nullptr;
         d_powers_ = nullptr;
         d_jacobian_ = nullptr;
@@ -220,6 +223,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         cudaMalloc(&d_angle_var_idx_, num_buses_ * sizeof(int));
         cudaMalloc(&d_mag_var_idx_, num_buses_ * sizeof(int));
         cudaMalloc(&d_specified_magnitudes_, num_buses_ * sizeof(double));
+        cudaMalloc(&d_load_types_, num_buses_ * sizeof(int));
         cudaMalloc(&d_currents_, num_buses_ * sizeof(cuDoubleComplex));
         cudaMalloc(&d_powers_, num_buses_ * sizeof(cuDoubleComplex));
         cudaMalloc(&d_jacobian_, num_unknowns_ * num_unknowns_ * sizeof(double));
@@ -242,6 +246,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         // Copy power injections to device
         // Aggregate power from buses and appliances and convert to per-unit
         std::vector<cuDoubleComplex> h_power_inj(num_buses_, make_cuDoubleComplex(0.0, 0.0));
+        std::vector<int> h_load_types(num_buses_, 0);  // Default: const_pq
 
         // First, power specified directly on buses
         for (size_t i = 0; i < network_data.buses.size(); ++i) {
@@ -251,7 +256,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
                                                   bus.reactive_power * inv_base_power);
         }
 
-        // Add power from appliances connected to buses
+        // Add power from appliances connected to buses and extract load types
         for (auto const& appliance : network_data.appliances) {
             if (appliance.status == 1 && (appliance.type == ApplianceType::SOURCE ||
                                           appliance.type == ApplianceType::LOADGEN)) {
@@ -263,6 +268,11 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
                         h_power_inj[i] = make_cuDoubleComplex(
                             cuCreal(existing) + appliance.p_specified * inv_base_power,
                             cuCimag(existing) + appliance.q_specified * inv_base_power);
+
+                        // Extract load type for ZIP model (use first LOADGEN type found)
+                        if (appliance.type == ApplianceType::LOADGEN) {
+                            h_load_types[i] = static_cast<int>(appliance.load_gen_type);
+                        }
                         break;
                     }
                 }
@@ -271,6 +281,8 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
         cudaMemcpy(gpu_data_.d_power_injections, h_power_inj.data(),
                    num_buses_ * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_load_types_, h_load_types.data(), num_buses_ * sizeof(int),
+                   cudaMemcpyHostToDevice);
 
         data_initialized_ = true;
 
@@ -437,7 +449,8 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
             gpu_kernels::launch_calculate_power_mismatches(
                 gpu_data_.d_voltages, d_currents_, gpu_data_.d_power_injections,
-                gpu_data_.d_bus_types, gpu_data_.d_mismatches, num_buses_, d_mismatch_indices_);
+                gpu_data_.d_bus_types, d_load_types_, gpu_data_.d_mismatches, num_buses_,
+                d_mismatch_indices_);
 
             // Step 3: Check convergence (sync mismatches to host for now)
             gpu_data_.sync_mismatches_from_device();

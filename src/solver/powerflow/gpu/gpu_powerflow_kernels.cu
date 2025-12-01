@@ -44,11 +44,16 @@ __global__ void calculate_current_injections_kernel(int const* __restrict__ row_
  * @brief CUDA kernel to calculate power injections: S = V * conj(I)
  *
  * Also calculates power mismatches for PQ and PV buses
+ * Supports ZIP load model:
+ * - const_pq (0): S(V) = S_rated (constant power)
+ * - const_y (1):  S(V) = S_rated * |V|^2 (constant impedance)
+ * - const_i (2):  S(V) = S_rated * |V| (constant current)
  */
 __global__ void calculate_power_mismatches_kernel(
     cuDoubleComplex const* __restrict__ voltages, cuDoubleComplex const* __restrict__ currents,
-    cuDoubleComplex const* __restrict__ specified_power,
-    int const* __restrict__ bus_types,  // 0=SLACK, 1=PQ, 2=PV
+    cuDoubleComplex const* __restrict__ specified_power_rated,  // S_rated (at nominal voltage)
+    int const* __restrict__ bus_types,                          // 0=PQ, 1=PV, 2=SLACK
+    int const* __restrict__ load_types,                         // 0=const_pq, 1=const_y, 2=const_i
     double* __restrict__ mismatches, int num_buses,
     int* __restrict__ mismatch_indices  // Maps bus -> mismatch vector index
 ) {
@@ -65,8 +70,25 @@ __global__ void calculate_power_mismatches_kernel(
         cuDoubleComplex i_conj = cuConj(currents[bus_idx]);
         cuDoubleComplex s_calc = cuCmul(v, i_conj);
 
-        // Get specified power
-        cuDoubleComplex s_spec = specified_power[bus_idx];
+        // Get rated power and apply ZIP model scaling
+        cuDoubleComplex s_rated = specified_power_rated[bus_idx];
+        cuDoubleComplex s_spec = s_rated;  // Default: const_pq
+
+        // Apply ZIP load model scaling based on voltage
+        int load_type = load_types[bus_idx];
+        double v_mag = cuCabs(v);
+
+        switch (load_type) {
+            case 0:  // const_pq: S(V) = S_rated (no scaling)
+                break;
+            case 1:  // const_y: S(V) = S_rated * |V|^2 (constant impedance)
+                s_spec = make_cuDoubleComplex(cuCreal(s_rated) * v_mag * v_mag,
+                                              cuCimag(s_rated) * v_mag * v_mag);
+                break;
+            case 2:  // const_i: S(V) = S_rated * |V| (constant current)
+                s_spec = make_cuDoubleComplex(cuCreal(s_rated) * v_mag, cuCimag(s_rated) * v_mag);
+                break;
+        }
 
         // Get mismatch index
         int mismatch_idx = mismatch_indices[bus_idx];
@@ -458,14 +480,15 @@ void launch_calculate_current_injections(int const* d_row_ptr, int const* d_col_
 void launch_calculate_power_mismatches(cuDoubleComplex const* d_voltages,
                                        cuDoubleComplex const* d_currents,
                                        cuDoubleComplex const* d_specified_power,
-                                       int const* d_bus_types, double* d_mismatches, int num_buses,
+                                       int const* d_bus_types, int const* d_load_types,
+                                       double* d_mismatches, int num_buses,
                                        int* d_mismatch_indices) {
     int blockSize = 256;
     int numBlocks = (num_buses + blockSize - 1) / blockSize;
 
     calculate_power_mismatches_kernel<<<numBlocks, blockSize>>>(
-        d_voltages, d_currents, d_specified_power, d_bus_types, d_mismatches, num_buses,
-        d_mismatch_indices);
+        d_voltages, d_currents, d_specified_power, d_bus_types, d_load_types, d_mismatches,
+        num_buses, d_mismatch_indices);
 
     cudaDeviceSynchronize();
 }

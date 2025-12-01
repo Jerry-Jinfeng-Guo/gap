@@ -25,10 +25,9 @@ def test_batch_api():
     test_case = "radial_10feeder_10nodepf"
     data_dir = Path(__file__).parent / "test_data" / test_case
 
-    if not data_dir.exists():
-        print(f"❌ Test data not found at {data_dir}")
-        print(f"   Please run generate_test_data.py first")
-        return False
+    assert (
+        data_dir.exists()
+    ), f"Test data not found at {data_dir}. Please run generate_test_data.py first"
 
     print(f"\nTest case: {test_case}")
 
@@ -282,16 +281,22 @@ def test_batch_api():
             f"   - Performance: {total_time_ms/pgm_time_ms:.2f}x vs PGM (with caching)"
         )
         print(f"   - Caching benefit: {total_time_nc_ms/total_time_ms:.2f}x speedup")
-        return True
     else:
         print("❌ TESTS FAILED")
         if int(converged) != n_scenarios:
             print(f"   - Convergence issue: {int(converged)}/{n_scenarios} scenarios")
         if not accuracy_pass:
             print(f"   - Accuracy issue: errors exceed threshold")
-        return False
+
+    # Use assertions for pytest
+    assert (
+        int(converged) == n_scenarios
+    ), f"Only {int(converged)}/{n_scenarios} scenarios converged"
+    assert (
+        accuracy_pass
+    ), f"Accuracy check failed: max error {max_voltage_error:.2e} exceeds {voltage_threshold:.2e}"
 
 
 if __name__ == "__main__":
-    success = test_batch_api()
-    sys.exit(0 if success else 1)
+    test_batch_api()
+    print("\n✅ Test completed successfully")

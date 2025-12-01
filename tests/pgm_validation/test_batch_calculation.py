@@ -15,6 +15,7 @@ import sys
 import time
 
 import numpy as np
+import pytest
 
 # Add parent to path
 sys.path.append(str(Path(__file__).parent))
@@ -211,6 +212,16 @@ def compare_with_reference(gap_results, batch_reference):
     }
 
 
+@pytest.mark.parametrize(
+    "test_case_name",
+    [
+        "radial_1feeder_2nodepf",
+        "radial_1feeder_4nodepf",
+        "radial_2feeder_4nodepf",
+        "radial_3feeder_4nodepf",
+        "radial_10feeder_10nodepf",
+    ],
+)
 def test_batch_calculation(test_case_name: str):
     """Test batch calculation for a specific test case."""
     print(f"\n{'='*70}")
@@ -219,100 +230,70 @@ def test_batch_calculation(test_case_name: str):
 
     test_dir = Path(__file__).parent / "test_data" / test_case_name
 
-    if not test_dir.exists():
-        print(f"❌ Test directory not found: {test_dir}")
-        return False
+    assert test_dir.exists(), f"Test directory not found: {test_dir}"
 
     # Load test data
     print("1. Loading test data...")
-    try:
-        input_data, update_data, batch_reference = load_test_case(test_dir)
-        print(f"   ✓ Network: {len(input_data.get('data', input_data)['node'])} nodes")
-        print(f"   ✓ Scenarios: {update_data['n_scenarios']}")
-        print(f"   ✓ PGM reference: {batch_reference['n_scenarios']} scenarios")
-        print(
-            f"   ✓ PGM batch time: {batch_reference['total_calculation_time_s']*1000:.2f} ms"
-        )
-    except Exception as e:
-        print(f"   ❌ Failed to load test data: {e}")
-        return False
+    input_data, update_data, batch_reference = load_test_case(test_dir)
+    print(f"   ✓ Network: {len(input_data.get('data', input_data)['node'])} nodes")
+    print(f"   ✓ Scenarios: {update_data['n_scenarios']}")
+    print(f"   ✓ PGM reference: {batch_reference['n_scenarios']} scenarios")
+    print(
+        f"   ✓ PGM batch time: {batch_reference['total_calculation_time_s']*1000:.2f} ms"
+    )
 
     # Parse network
     print("\n2. Parsing network...")
-    try:
-        parser = PGMJSONParser()
-        input_file = test_dir / "input.json"
-        gap_network = parser.parse_network(input_file)
-        print(
-            f"   ✓ Parsed: {gap_network.n_node} nodes, {gap_network.n_branch} branches"
-        )
-    except Exception as e:
-        print(f"   ❌ Failed to parse network: {e}")
-        return False
+    parser = PGMJSONParser()
+    input_file = test_dir / "input.json"
+    gap_network = parser.parse_network(input_file)
+    print(f"   ✓ Parsed: {gap_network.n_node} nodes, {gap_network.n_branch} branches")
 
     # Check if GAP is available
     if not GAP_AVAILABLE:
-        print("\n3. Running GAP batch calculation...")
-        print("   ❌ GAP solver not available - cannot run batch calculation")
-        print("\n💡 To enable GAP solver:")
-        print("   1. Build with Python bindings: cmake -DGAP_BUILD_PYTHON_BINDINGS=ON")
-        print("   2. Make sure build/lib is in PYTHONPATH")
-        return False
+        pytest.skip("GAP solver not available")
 
     # Run GAP batch calculation (sequential for now)
     print("\n3. Running GAP batch calculation (sequential)...")
     config = {"tolerance": 1e-8, "max_iterations": 20}
 
-    try:
-        gap_results, total_time = run_gap_batch_sequential(
-            parser, gap_network, update_data, config
-        )
-        print(f"   ✓ Completed: {len(gap_results)} scenarios")
-        print(f"   ✓ Total time: {total_time*1000:.2f} ms")
-        print(f"   ✓ Avg time: {total_time*1000/len(gap_results):.2f} ms/scenario")
-    except Exception as e:
-        print(f"   ❌ Failed to run GAP calculation: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return False
+    gap_results, total_time = run_gap_batch_sequential(
+        parser, gap_network, update_data, config
+    )
+    print(f"   ✓ Completed: {len(gap_results)} scenarios")
+    print(f"   ✓ Total time: {total_time*1000:.2f} ms")
+    print(f"   ✓ Avg time: {total_time*1000/len(gap_results):.2f} ms/scenario")
 
     # Compare with reference
     print("\n4. Comparing with PGM reference...")
-    try:
-        comparison = compare_with_reference(gap_results, batch_reference)
-        print(f"\n   Summary:")
-        print(f"   Max voltage error: {comparison['max_voltage_error']:.2e} pu")
-        print(f"   Avg voltage error: {comparison['avg_voltage_error']:.2e} pu")
-        print(f"   Max angle error: {comparison['max_angle_error']:.2e}°")
+    comparison = compare_with_reference(gap_results, batch_reference)
+    print(f"\n   Summary:")
+    print(f"   Max voltage error: {comparison['max_voltage_error']:.2e} pu")
+    print(f"   Avg voltage error: {comparison['avg_voltage_error']:.2e} pu")
+    print(f"   Max angle error: {comparison['max_angle_error']:.2e}°")
 
-        # Performance comparison
-        pgm_time = batch_reference["total_calculation_time_s"] * 1000
-        gap_time = total_time * 1000
-        speedup = pgm_time / gap_time if gap_time > 0 else 0
+    # Performance comparison
+    pgm_time = batch_reference["total_calculation_time_s"] * 1000
+    gap_time = total_time * 1000
+    speedup = pgm_time / gap_time if gap_time > 0 else 0
 
-        print(f"\n   Performance:")
-        print(f"   PGM batch time: {pgm_time:.2f} ms")
-        print(f"   GAP sequential time: {gap_time:.2f} ms")
-        print(
-            f"   Relative speed: {speedup:.2f}x {'faster' if speedup > 1 else 'slower'}"
-        )
+    print(f"\n   Performance:")
+    print(f"   PGM batch time: {pgm_time:.2f} ms")
+    print(f"   GAP sequential time: {gap_time:.2f} ms")
+    print(f"   Relative speed: {speedup:.2f}x {'faster' if speedup > 1 else 'slower'}")
 
-        # Pass/fail criteria
-        passed = comparison["max_voltage_error"] < 1e-4
-        if passed:
-            print(f"\n   ✅ VALIDATION PASSED")
-        else:
-            print(f"\n   ⚠️  VALIDATION WARNING: Errors exceed tolerance")
+    # Pass/fail criteria
+    max_error = comparison["max_voltage_error"]
+    tolerance = 1e-4
 
-        return passed
+    if max_error < tolerance:
+        print(f"\n   ✅ VALIDATION PASSED")
+    else:
+        print(f"\n   ⚠️  VALIDATION WARNING: Errors exceed tolerance")
 
-    except Exception as e:
-        print(f"   ❌ Failed to compare results: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return False
+    assert (
+        max_error < tolerance
+    ), f"Max voltage error {max_error:.2e} exceeds tolerance {tolerance:.2e}"
 
 
 def main():

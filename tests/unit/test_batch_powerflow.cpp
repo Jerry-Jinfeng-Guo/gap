@@ -1,3 +1,5 @@
+#include <filesystem>
+
 #include "gap/admittance/admittance_interface.h"
 #include "gap/core/backend_factory.h"
 #include "gap/io/io_interface.h"
@@ -10,10 +12,28 @@ using namespace gap;
 using namespace gap::solver;
 using namespace gap::core;
 
+// Helper function to find data files in various relative paths
+static std::string find_data_file(std::string const& relative_path) {
+    std::vector<std::string> candidates = {
+        relative_path,            // Direct path from project root
+        "../" + relative_path,    // From build directory
+        "../../" + relative_path  // From build/bin directory
+    };
+
+    for (auto const& path : candidates) {
+        if (std::filesystem::exists(path)) {
+            return path;
+        }
+    }
+
+    // If not found, return the original path and let error occur
+    return relative_path;
+}
+
 void test_batch_results_match_individual() {
     // Load test network
     auto io_module = BackendFactory::create_io_module();
-    auto base_network = io_module->read_network_data("data/pgm/network_1.json");
+    auto base_network = io_module->read_network_data(find_data_file("data/pgm/network_1.json"));
 
     // Build admittance matrix
     auto admittance = BackendFactory::create_admittance_backend(BackendType::CPU);
@@ -58,7 +78,7 @@ void test_batch_results_match_individual() {
 
     // Verify results match
     ASSERT_EQ(batch_result.results.size(), scenarios.size());
-    ASSERT_EQ(batch_result.converged_count, scenarios.size());
+    ASSERT_EQ(batch_result.converged_count, static_cast<int>(scenarios.size()));
     ASSERT_EQ(batch_result.failed_count, 0);
 
     for (size_t i = 0; i < scenarios.size(); ++i) {
@@ -79,7 +99,7 @@ void test_batch_results_match_individual() {
 void test_batch_performance_improvement() {
     // Load test network
     auto io_module = BackendFactory::create_io_module();
-    auto base_network = io_module->read_network_data("data/pgm/network_1.json");
+    auto base_network = io_module->read_network_data(find_data_file("data/pgm/network_1.json"));
 
     auto admittance = BackendFactory::create_admittance_backend(BackendType::CPU);
     auto y_matrix = admittance->build_admittance_matrix(base_network);
@@ -117,12 +137,12 @@ void test_batch_performance_improvement() {
     std::cout << "  Total time: " << batch_result.total_solve_time_ms << " ms\n";
     std::cout << "  Avg time per scenario: " << batch_result.avg_solve_time_ms << " ms\n";
 
-    ASSERT_TRUE(batch_result.converged_count == scenarios.size());
+    ASSERT_TRUE(batch_result.converged_count == static_cast<int>(scenarios.size()));
 }
 
 void test_batch_empty_scenarios() {
     auto io_module = BackendFactory::create_io_module();
-    auto base_network = io_module->read_network_data("data/pgm/network_1.json");
+    auto base_network = io_module->read_network_data(find_data_file("data/pgm/network_1.json"));
 
     auto admittance = BackendFactory::create_admittance_backend(BackendType::CPU);
     auto y_matrix = admittance->build_admittance_matrix(base_network);
@@ -144,7 +164,7 @@ void test_batch_empty_scenarios() {
 
 void test_batch_nr_solver() {
     auto io_module = BackendFactory::create_io_module();
-    auto base_network = io_module->read_network_data("data/pgm/network_1.json");
+    auto base_network = io_module->read_network_data(find_data_file("data/pgm/network_1.json"));
 
     auto admittance = BackendFactory::create_admittance_backend(BackendType::CPU);
     auto y_matrix = admittance->build_admittance_matrix(base_network);
@@ -171,7 +191,7 @@ void test_batch_nr_solver() {
     auto batch_result = cpu_nr_solver->solve_power_flow_batch(scenarios, *y_matrix, batch_config);
 
     ASSERT_EQ(batch_result.results.size(), scenarios.size());
-    ASSERT_EQ(batch_result.converged_count, scenarios.size());
+    ASSERT_EQ(batch_result.converged_count, static_cast<int>(scenarios.size()));
     ASSERT_EQ(batch_result.failed_count, 0);
 
     for (auto const& result : batch_result.results) {

@@ -105,8 +105,19 @@ std::unique_ptr<solver::IPowerFlowSolver> BackendFactory::create_powerflow_solve
             case BackendType::CPU:
                 return std::make_unique<solver::CPUIterativeCurrent>();
 
-            case BackendType::GPU_CUDA:
-                throw std::runtime_error("GPU iterative current solver not yet implemented");
+            case BackendType::GPU_CUDA: {
+                // Try to load GPU IC solver dynamically
+                void* handle = load_backend_library("libgap_powerflow_gpu.so");
+                if (handle) {
+                    typedef solver::IPowerFlowSolver* (*CreateFunc)();
+                    CreateFunc create_func =
+                        (CreateFunc)dlsym(handle, "create_gpu_ic_powerflow_solver");
+                    if (create_func) {
+                        return std::unique_ptr<solver::IPowerFlowSolver>(create_func());
+                    }
+                }
+                throw std::runtime_error("GPU iterative current solver backend not available");
+            }
 
             default:
                 throw std::invalid_argument("Unknown backend type");

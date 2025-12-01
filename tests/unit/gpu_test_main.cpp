@@ -28,6 +28,12 @@ void test_gpu_vs_cpu_jacobian_3bus();
 // GPU Mismatch calculation tests
 void register_gpu_mismatch_tests(TestRunner& runner);
 
+// GPU Iterative Current tests
+void test_gpu_ic_basic_convergence();
+void test_gpu_ic_vs_cpu_ic();
+void test_gpu_ic_batch_with_ybus_reuse();
+void test_gpu_ic_batch_vs_cpu_batch();
+
 int main() {
     std::cout << "Running GPU tests..." << std::endl;
 
@@ -71,6 +77,12 @@ int main() {
 
         // GPU Mismatch Calculation tests - NEW: Focus on mismatch calculation debugging
         register_gpu_mismatch_tests(runner);
+
+        // GPU Iterative Current tests - NEW
+        runner.add_test("GPU IC - Basic Convergence", test_gpu_ic_basic_convergence);
+        runner.add_test("GPU IC - vs CPU IC", test_gpu_ic_vs_cpu_ic);
+        runner.add_test("GPU IC - Batch with Y-bus Reuse", test_gpu_ic_batch_with_ybus_reuse);
+        runner.add_test("GPU IC - Batch vs CPU Batch", test_gpu_ic_batch_vs_cpu_batch);
 
         runner.run_all();
 

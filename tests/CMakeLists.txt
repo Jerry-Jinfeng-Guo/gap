@@ -23,6 +23,20 @@ target_link_libraries(gap_unit_tests
     gap_powerflow_cpu
 )
 
+# Main CLI tests
+add_executable(gap_main_cli_tests
+    unit/test_main_cli.cpp
+)
+
+target_include_directories(gap_main_cli_tests PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/tests/unit
+)
+
+target_link_libraries(gap_main_cli_tests
+    gap_core
+)
+
 # Validation tests
 add_executable(gap_validation_tests
     validation/validation_main.cpp
@@ -55,7 +69,13 @@ endif()
 
 # Add tests to CTest
 add_test(NAME UnitTests COMMAND gap_unit_tests)
+set_tests_properties(UnitTests PROPERTIES LABELS "unit")
+
+add_test(NAME MainCLITests COMMAND gap_main_cli_tests WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+set_tests_properties(MainCLITests PROPERTIES LABELS "unit;cli")
+
 add_test(NAME ValidationTests COMMAND gap_validation_tests WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+set_tests_properties(ValidationTests PROPERTIES LABELS "validation")
 
 # Python validation tests using pytest
 find_program(PYTEST_EXECUTABLE pytest)

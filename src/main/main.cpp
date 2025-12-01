@@ -15,10 +15,13 @@ using namespace gap;
 struct AppConfig {
     std::string input_file;
     std::string output_file;
+    std::string update_file;  // For batch calculation
     BackendType backend_type = BackendType::CPU;
     solver::PowerFlowConfig pf_config;
+    solver::BatchPowerFlowConfig batch_config;
     bool verbose = false;
     bool benchmark = false;
+    bool batch_mode = false;
 };
 
 /**
@@ -29,16 +32,26 @@ void print_usage(char const* program_name) {
               << "\nOPTIONS:\n"
               << "  -i, --input FILE      Input file path (required)\n"
               << "  -o, --output FILE     Output file path (required)\n"
+              << "  -u, --update FILE     Update file for batch calculation (optional)\n"
               << "  -b, --backend TYPE    Backend type: cpu, gpu (default: cpu)\n"
               << "  -t, --tolerance VAL   Convergence tolerance (default: 1e-6)\n"
               << "  -m, --max-iter NUM    Maximum iterations (default: 50)\n"
               << "  -v, --verbose         Enable verbose output\n"
               << "  --benchmark           Enable benchmarking\n"
               << "  --flat-start          Use flat start initialization\n"
+              << "  --batch               Enable batch calculation mode\n"
+              << "  --reuse-ybus          Reuse Y-bus factorization (batch only)\n"
+              << "  --warm-start          Use warm start between scenarios (batch only)\n"
               << "  -h, --help            Show this help message\n"
               << "\nEXAMPLES:\n"
-              << "  " << program_name << " -i network.json -o results.json\n"
-              << "  " << program_name << " -i network.json -o results.json -b gpu -v\n"
+              << "  Single power flow:\n"
+              << "    " << program_name << " -i network.json -o results.json\n"
+              << "    " << program_name << " -i network.json -o results.json -b gpu -v\n"
+              << "\n  Batch power flow:\n"
+              << "    " << program_name
+              << " -i input.json -u update.json -o batch_output.json --batch\n"
+              << "    " << program_name
+              << " -i input.json -u update.json -o output.json --batch --reuse-ybus -v\n"
               << std::endl;
 }
 
@@ -65,6 +78,12 @@ AppConfig parse_arguments(int argc, char* argv[]) {
                 config.output_file = argv[++i];
             } else {
                 throw std::invalid_argument("Missing output file argument");
+            }
+        } else if (arg == "-u" || arg == "--update") {
+            if (i + 1 < argc) {
+                config.update_file = argv[++i];
+            } else {
+                throw std::invalid_argument("Missing update file argument");
             }
         } else if (arg == "-b" || arg == "--backend") {
             if (i + 1 < argc) {
@@ -98,6 +117,12 @@ AppConfig parse_arguments(int argc, char* argv[]) {
             config.benchmark = true;
         } else if (arg == "--flat-start") {
             config.pf_config.use_flat_start = true;
+        } else if (arg == "--batch") {
+            config.batch_mode = true;
+        } else if (arg == "--reuse-ybus") {
+            config.batch_config.reuse_y_bus_factorization = true;
+        } else if (arg == "--warm-start") {
+            config.batch_config.warm_start = true;
         } else {
             throw std::invalid_argument("Unknown argument: " + arg);
         }
@@ -110,8 +135,123 @@ AppConfig parse_arguments(int argc, char* argv[]) {
     if (config.output_file.empty()) {
         throw std::invalid_argument("Output file is required");
     }
+    if (config.batch_mode && config.update_file.empty()) {
+        throw std::invalid_argument("Update file is required for batch calculation");
+    }
+
+    // Initialize batch config from base config
+    config.batch_config.base_config = config.pf_config;
+    config.batch_config.verbose_summary = config.verbose;
 
     return config;
+}
+
+/**
+ * @brief Run batch power flow calculation
+ */
+int run_batch_power_flow(AppConfig const& config) {
+    auto& logger = gap::logging::global_logger;
+    logger.setComponent("GAP");
+
+    try {
+        // Check if requested backend is available
+        if (!core::BackendFactory::is_backend_available(config.backend_type)) {
+            LOG_ERROR(logger, "Requested backend is not available");
+            return 1;
+        }
+
+        if (config.verbose) {
+            LOG_INFO(logger, "GAP Batch Power Flow Calculator");
+            LOG_INFO(logger, "Configuration:");
+            LOG_INFO(logger, "  Input file:", config.input_file);
+            LOG_INFO(logger, "  Update file:", config.update_file);
+            LOG_INFO(logger, "  Output file:", config.output_file);
+            LOG_INFO(logger,
+                     "  Backend:", (config.backend_type == BackendType::CPU ? "CPU" : "GPU"));
+            LOG_INFO(logger, "  Tolerance:", config.pf_config.tolerance);
+            LOG_INFO(logger, "  Max iterations:", config.pf_config.max_iterations);
+            LOG_INFO(logger, "  Reuse Y-bus:", config.batch_config.reuse_y_bus_factorization);
+            LOG_INFO(logger, "  Warm start:", config.batch_config.warm_start);
+        }
+
+        auto start_time = std::chrono::high_resolution_clock::now();
+
+        // Create backend instances
+        auto io_module = core::BackendFactory::create_io_module();
+        auto admittance_backend =
+            core::BackendFactory::create_admittance_backend(config.backend_type);
+        std::shared_ptr<solver::ILUSolver> lu_solver(
+            core::BackendFactory::create_lu_solver(config.backend_type).release());
+        auto powerflow_solver = core::BackendFactory::create_powerflow_solver(config.backend_type);
+
+        // Read base network data
+        if (config.verbose) {
+            LOG_INFO(logger, "Reading base network data...");
+        }
+        auto base_network = io_module->read_network_data(config.input_file);
+
+        // Read batch update data
+        if (config.verbose) {
+            LOG_INFO(logger, "Reading batch update data...");
+        }
+        auto update_data = io_module->read_network_data(config.update_file);
+
+        // TODO: Parse update_data to create scenarios vector
+        // For now, create a simple scenario with the update data
+        std::vector<NetworkData> scenarios;
+        scenarios.push_back(update_data);
+
+        // Build admittance matrix for base network
+        if (config.verbose) {
+            LOG_INFO(logger, "Building admittance matrix...");
+        }
+        auto admittance_matrix = admittance_backend->build_admittance_matrix(base_network);
+
+        // Configure power flow solver
+        powerflow_solver->set_lu_solver(lu_solver);
+
+        // Solve batch power flow
+        if (config.verbose) {
+            LOG_INFO(logger, "Solving batch power flow with", scenarios.size(), "scenarios...");
+        }
+        auto batch_result = powerflow_solver->solve_power_flow_batch(scenarios, *admittance_matrix,
+                                                                     config.batch_config);
+
+        // Write results (simplified - just write first scenario)
+        if (config.verbose) {
+            LOG_INFO(logger, "Writing results...");
+        }
+        if (!batch_result.results.empty()) {
+            auto const& first_result = batch_result.results[0];
+            io_module->write_results(config.output_file, first_result.bus_voltages,
+                                     first_result.converged, first_result.iterations);
+        }
+
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration =
+            std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
+        // Print summary
+        std::cout << "\nBatch Power Flow Solution Summary:" << std::endl;
+        std::cout << "  Scenarios: " << batch_result.results.size() << std::endl;
+        std::cout << "  Converged: " << batch_result.converged_count << std::endl;
+        std::cout << "  Failed: " << batch_result.failed_count << std::endl;
+        std::cout << "  Total iterations: " << batch_result.total_iterations << std::endl;
+        std::cout << "  Total solve time: " << batch_result.total_solve_time_ms << " ms"
+                  << std::endl;
+        std::cout << "  Avg time per scenario: " << batch_result.avg_solve_time_ms << " ms"
+                  << std::endl;
+
+        if (config.benchmark) {
+            std::cout << "  Total execution time: " << duration.count() << " ms" << std::endl;
+        }
+
+        return (batch_result.failed_count == 0) ? 0 : 1;
+
+    } catch (std::exception const& e) {
+        LOG_ERROR(logger, "Error:", e.what());
+        return 1;
+    }
 }
 
 /**
@@ -223,8 +363,12 @@ int main(int argc, char* argv[]) {
         // Parse command line arguments
         auto config = parse_arguments(argc, argv);
 
-        // Run power flow calculation
-        return run_power_flow(config);
+        // Run power flow calculation (batch or single)
+        if (config.batch_mode) {
+            return run_batch_power_flow(config);
+        } else {
+            return run_power_flow(config);
+        }
 
     } catch (std::exception const& e) {
         std::cerr << "Error: " << e.what() << std::endl;

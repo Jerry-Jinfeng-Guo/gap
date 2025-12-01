@@ -825,6 +825,87 @@ class CPUNewtonRaphson : public IPowerFlowSolver {
     }
 
     void clear_iteration_states() override { iteration_states_.clear(); }
+
+    /**
+     * @brief Batch solve with admittance matrix caching
+     * For NR, we can cache the admittance matrix but must rebuild Jacobian each iteration
+     * Still provides benefit by avoiding matrix construction overhead
+     */
+    BatchPowerFlowResult solve_power_flow_batch(std::vector<NetworkData> const& network_scenarios,
+                                                SparseMatrix const& admittance_matrix,
+                                                BatchPowerFlowConfig const& config) override {
+        logger.setComponent("CPUNewtonRaphson::Batch");
+        LOG_INFO(logger, "Starting batch power flow solution");
+        LOG_INFO(logger, "  Number of scenarios:", network_scenarios.size());
+
+        if (network_scenarios.empty()) {
+            LOG_WARN(logger, "Empty scenario list provided");
+            return BatchPowerFlowResult{};
+        }
+
+        // Validate all scenarios have same topology
+        int num_buses = network_scenarios[0].num_buses;
+        for (size_t i = 1; i < network_scenarios.size(); ++i) {
+            if (network_scenarios[i].num_buses != num_buses) {
+                LOG_ERROR(logger, "Scenario", i,
+                          "has different number of buses:", network_scenarios[i].num_buses, "vs",
+                          num_buses);
+                throw std::runtime_error("All scenarios must have same network topology");
+            }
+        }
+
+        BatchPowerFlowResult batch_result;
+        batch_result.results.reserve(network_scenarios.size());
+
+        auto batch_start = std::chrono::high_resolution_clock::now();
+
+        // For NR, admittance matrix is already passed in and reused
+        // Jacobian must be rebuilt each iteration, so less caching benefit than IC
+        LOG_INFO(logger, "Using shared admittance matrix for all", network_scenarios.size(),
+                 "scenarios");
+
+        // Solve each scenario
+        for (size_t i = 0; i < network_scenarios.size(); ++i) {
+            auto const& network = network_scenarios[i];
+
+            if (config.base_config.verbose || config.verbose_summary) {
+                LOG_INFO(logger, "Solving scenario", i + 1, "of", network_scenarios.size());
+            }
+
+            // Solve this scenario
+            auto result = solve_power_flow(network, admittance_matrix, config.base_config);
+
+            // Accumulate statistics
+            batch_result.results.push_back(result);
+            batch_result.total_iterations += result.iterations;
+            if (result.converged) {
+                batch_result.converged_count++;
+            } else {
+                batch_result.failed_count++;
+            }
+        }
+
+        auto batch_end = std::chrono::high_resolution_clock::now();
+        batch_result.total_solve_time_ms =
+            std::chrono::duration<double, std::milli>(batch_end - batch_start).count();
+        batch_result.avg_solve_time_ms =
+            batch_result.total_solve_time_ms / network_scenarios.size();
+
+        // Print summary
+        if (config.verbose_summary) {
+            LOG_INFO(logger, "=== Batch Solution Summary ===");
+            LOG_INFO(logger, "  Total scenarios:", network_scenarios.size());
+            LOG_INFO(logger, "  Converged:", batch_result.converged_count);
+            LOG_INFO(logger, "  Failed:", batch_result.failed_count);
+            LOG_INFO(logger, "  Total iterations:", batch_result.total_iterations);
+            LOG_INFO(logger, "  Avg iterations per scenario:",
+                     batch_result.total_iterations / static_cast<double>(network_scenarios.size()));
+            LOG_INFO(logger, "  Total time:", batch_result.total_solve_time_ms, "ms");
+            LOG_INFO(logger, "  Avg time per scenario:", batch_result.avg_solve_time_ms, "ms");
+        }
+
+        return batch_result;
+    }
 };
 
 }  // namespace gap::solver

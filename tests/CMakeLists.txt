@@ -8,6 +8,7 @@ add_executable(gap_unit_tests
     unit/test_iterative_current.cpp
     unit/test_newton_raphson_functions.cpp
     unit/test_pgm_io.cpp
+    unit/test_batch_powerflow.cpp
 )
 
 target_include_directories(gap_unit_tests PUBLIC

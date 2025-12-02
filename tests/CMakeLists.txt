@@ -23,6 +23,15 @@ target_link_libraries(gap_unit_tests
     gap_powerflow_cpu
 )
 
+# Add GPU libraries if CUDA is enabled
+if(GAP_ENABLE_CUDA)
+    target_link_libraries(gap_unit_tests
+        gap_admittance_gpu
+        gap_lu_gpu
+        gap_powerflow_gpu
+    )
+endif()
+
 # Main CLI tests
 add_executable(gap_main_cli_tests
     unit/test_main_cli.cpp

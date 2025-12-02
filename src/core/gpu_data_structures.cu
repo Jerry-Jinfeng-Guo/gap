@@ -124,6 +124,7 @@ void GPUPowerFlowData::allocate_device(int buses, int unknowns) {
     cudaMalloc(&d_rhs, unknowns * sizeof(cuDoubleComplex));
     cudaMalloc(&d_solution, unknowns * sizeof(cuDoubleComplex));
     cudaMalloc(&d_bus_types, buses * sizeof(int));
+    cudaMalloc(&d_load_types, buses * sizeof(int));
 
     owns_device_memory = true;
 }
@@ -136,6 +137,7 @@ void GPUPowerFlowData::free_device() {
         if (d_rhs) cudaFree(d_rhs);
         if (d_solution) cudaFree(d_solution);
         if (d_bus_types) cudaFree(d_bus_types);
+        if (d_load_types) cudaFree(d_load_types);
     }
 
     d_voltages = nullptr;
@@ -144,6 +146,7 @@ void GPUPowerFlowData::free_device() {
     d_rhs = nullptr;
     d_solution = nullptr;
     d_bus_types = nullptr;
+    d_load_types = nullptr;
 
     num_buses = 0;
     num_unknowns = 0;

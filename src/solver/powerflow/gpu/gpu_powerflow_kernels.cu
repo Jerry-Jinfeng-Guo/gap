@@ -3,6 +3,8 @@
 #include <cuComplex.h>
 #include <device_launch_parameters.h>
 
+#include <stdexcept>
+
 #include "gap/core/types.h"
 
 namespace gap::solver::gpu_kernels {
@@ -556,6 +558,169 @@ void launch_calculate_power_injections(cuDoubleComplex const* d_voltages,
 
     calculate_power_injections_kernel<<<numBlocks, blockSize>>>(d_voltages, d_currents, d_powers,
                                                                 num_buses);
+
+    cudaDeviceSynchronize();
+}
+
+// ===================================================================================
+// GPU Iterative Current Kernels - Added here for device module loading compatibility
+// ===================================================================================
+
+__global__ void gpu_ic_calculate_current_injections_kernel(
+    cuDoubleComplex const* __restrict__ voltages,
+    cuDoubleComplex const* __restrict__ specified_powers, cuDoubleComplex* __restrict__ currents,
+    int const* __restrict__ bus_types, int const* __restrict__ load_types,
+    double const* __restrict__ u_pu, int num_buses) {
+    int bus_idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (bus_idx < num_buses) {
+        // Slack bus (BusType::SLACK = 2)
+        if (bus_types[bus_idx] == 2) {
+            // I_inj = Y_source * U_ref
+            cuDoubleComplex u_ref = make_cuDoubleComplex(u_pu[bus_idx], 0.0);
+            cuDoubleComplex y_source = make_cuDoubleComplex(1.0, -10.0);
+            currents[bus_idx] = cuCmul(y_source, u_ref);
+            return;
+        }
+
+        cuDoubleComplex s_spec = specified_powers[bus_idx];
+        cuDoubleComplex v = voltages[bus_idx];
+        double v_mag = cuCabs(v);
+
+        if (v_mag < 1e-10) {
+            currents[bus_idx] = make_cuDoubleComplex(0.0, 0.0);
+            return;
+        }
+
+        double alpha = 0.0, beta = 0.0, gamma = 0.0;
+        int load_type = load_types[bus_idx];
+
+        if (load_type == 0) {  // Constant power
+            alpha = 1.0;
+        } else if (load_type == 1) {  // Constant current
+            beta = 1.0;
+        } else if (load_type == 2) {  // Constant impedance
+            gamma = 1.0;
+        } else {  // Mixed
+            alpha = 0.5;
+            beta = 0.3;
+            gamma = 0.2;
+        }
+
+        double v_ratio = v_mag / u_pu[bus_idx];
+        double zip_factor = alpha + beta * v_ratio + gamma * v_ratio * v_ratio;
+
+        cuDoubleComplex s_actual = cuCmul(s_spec, make_cuDoubleComplex(zip_factor, 0.0));
+        cuDoubleComplex v_conj = cuConj(v);
+        cuDoubleComplex i = cuCdiv(cuConj(s_actual), v_conj);
+
+        currents[bus_idx] = i;
+    }
+}
+
+__global__ void gpu_ic_check_convergence_kernel(cuDoubleComplex const* __restrict__ old_voltages,
+                                                cuDoubleComplex const* __restrict__ new_voltages,
+                                                double* __restrict__ max_change, int num_buses) {
+    __shared__ double shared_max[256];
+
+    int bus_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int tid = threadIdx.x;
+
+    double local_max = 0.0;
+
+    if (bus_idx < num_buses) {
+        cuDoubleComplex old_v = old_voltages[bus_idx];
+        cuDoubleComplex new_v = new_voltages[bus_idx];
+        cuDoubleComplex diff = cuCsub(new_v, old_v);
+        local_max = cuCabs(diff);
+    }
+
+    shared_max[tid] = local_max;
+    __syncthreads();
+
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            if (shared_max[tid + s] > shared_max[tid]) {
+                shared_max[tid] = shared_max[tid + s];
+            }
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        atomicMax(reinterpret_cast<unsigned long long*>(max_change),
+                  __double_as_longlong(shared_max[0]));
+    }
+}
+
+__global__ void gpu_ic_enforce_slack_kernel(cuDoubleComplex* __restrict__ voltages,
+                                            int const* __restrict__ bus_types,
+                                            double const* __restrict__ u_pu, int num_buses) {
+    int bus_idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (bus_idx < num_buses) {
+        if (bus_types[bus_idx] == 2) {
+            voltages[bus_idx] = make_cuDoubleComplex(u_pu[bus_idx], 0.0);
+        }
+    }
+}
+
+// Launcher functions for GPU IC kernels
+void launch_gpu_ic_calculate_current_injections(cuDoubleComplex const* d_voltages,
+                                                cuDoubleComplex const* d_specified_powers,
+                                                cuDoubleComplex* d_currents, int const* d_bus_types,
+                                                int const* d_load_types, double const* d_u_pu,
+                                                int num_buses) {
+    int blockSize = 256;
+    int numBlocks = (num_buses + blockSize - 1) / blockSize;
+
+    // Clear any pre-existing errors
+    cudaGetLastError();
+
+    // Ensure we're on the right CUDA device context
+    cudaError_t device_err = cudaSetDevice(0);
+    if (device_err != cudaSuccess) {
+        throw std::runtime_error("Failed to set CUDA device: " +
+                                 std::string(cudaGetErrorString(device_err)));
+    }
+
+    gpu_ic_calculate_current_injections_kernel<<<numBlocks, blockSize>>>(
+        d_voltages, d_specified_powers, d_currents, d_bus_types, d_load_types, d_u_pu, num_buses);
+
+    // Check for kernel launch error
+    cudaError_t launch_err = cudaGetLastError();
+    if (launch_err != cudaSuccess) {
+        throw std::runtime_error("Kernel launch failed: " +
+                                 std::string(cudaGetErrorString(launch_err)));
+    }
+
+    // Check for kernel execution error
+    cudaError_t sync_err = cudaDeviceSynchronize();
+    if (sync_err != cudaSuccess) {
+        throw std::runtime_error("Kernel execution failed: " +
+                                 std::string(cudaGetErrorString(sync_err)));
+    }
+}
+
+void launch_gpu_ic_check_convergence(cuDoubleComplex const* d_old_voltages,
+                                     cuDoubleComplex const* d_new_voltages, double* d_max_change,
+                                     int num_buses) {
+    int blockSize = 256;
+    int numBlocks = (num_buses + blockSize - 1) / blockSize;
+
+    gpu_ic_check_convergence_kernel<<<numBlocks, blockSize>>>(d_old_voltages, d_new_voltages,
+                                                              d_max_change, num_buses);
+
+    cudaDeviceSynchronize();
+}
+
+void launch_gpu_ic_enforce_slack(cuDoubleComplex* d_voltages, int const* d_bus_types,
+                                 double const* d_u_pu, int num_buses) {
+    int blockSize = 256;
+    int numBlocks = (num_buses + blockSize - 1) / blockSize;
+
+    gpu_ic_enforce_slack_kernel<<<numBlocks, blockSize>>>(d_voltages, d_bus_types, d_u_pu,
+                                                          num_buses);
 
     cudaDeviceSynchronize();
 }

@@ -220,11 +220,11 @@ if(GAP_ENABLE_CUDA)
         gap_lu_gpu
         CUDA::cudart
         CUDA::cublas
+        CUDA::cuda_driver
     )
 
     set_target_properties(gap_powerflow_gpu PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+        CUDA_SEPARABLE_COMPILATION OFF
     )
 endif()
 
@@ -242,6 +242,15 @@ target_link_libraries(gap_main
     gap_io
     ${CMAKE_DL_LIBS}  # For dynamic loading of backends
 )
+
+# Link GPU libraries if CUDA is enabled (needed for static factory functions)
+if(GAP_ENABLE_CUDA)
+    target_link_libraries(gap_main
+        gap_powerflow_gpu
+        gap_lu_gpu
+        gap_admittance_gpu
+    )
+endif()
 
 # Set runtime path for shared libraries
 set_target_properties(gap_main PROPERTIES

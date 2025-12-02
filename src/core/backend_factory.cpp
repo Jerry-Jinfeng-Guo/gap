@@ -8,6 +8,12 @@
 // Include CUDA headers only if CUDA is available at compile time
 #if GAP_CUDA_AVAILABLE
 #include <cuda_runtime.h>
+
+// Forward declare GPU solver factory functions
+namespace gap::solver {
+extern "C" IPowerFlowSolver* create_gpu_nr_powerflow_solver();
+extern "C" IPowerFlowSolver* create_gpu_ic_powerflow_solver();
+}  // namespace gap::solver
 #endif
 
 // Include concrete implementations for static linking
@@ -81,17 +87,13 @@ std::unique_ptr<solver::IPowerFlowSolver> BackendFactory::create_powerflow_solve
                 return std::make_unique<solver::CPUNewtonRaphson>();
 
             case BackendType::GPU_CUDA: {
-                // Try to load GPU backend dynamically
-                void* handle = load_backend_library("libgap_powerflow_gpu.so");
-                if (handle) {
-                    typedef solver::IPowerFlowSolver* (*CreateFunc)();
-                    CreateFunc create_func =
-                        (CreateFunc)dlsym(handle, "create_gpu_powerflow_solver");
-                    if (create_func) {
-                        return std::unique_ptr<solver::IPowerFlowSolver>(create_func());
-                    }
-                }
-                throw std::runtime_error("GPU power flow solver backend not available");
+#if GAP_CUDA_AVAILABLE
+                // Directly call the factory function instead of dynamic loading
+                return std::unique_ptr<solver::IPowerFlowSolver>(
+                    solver::create_gpu_nr_powerflow_solver());
+#else
+                throw std::runtime_error("GPU support not compiled");
+#endif
             }
 
             default:
@@ -106,17 +108,13 @@ std::unique_ptr<solver::IPowerFlowSolver> BackendFactory::create_powerflow_solve
                 return std::make_unique<solver::CPUIterativeCurrent>();
 
             case BackendType::GPU_CUDA: {
-                // Try to load GPU IC solver dynamically
-                void* handle = load_backend_library("libgap_powerflow_gpu.so");
-                if (handle) {
-                    typedef solver::IPowerFlowSolver* (*CreateFunc)();
-                    CreateFunc create_func =
-                        (CreateFunc)dlsym(handle, "create_gpu_ic_powerflow_solver");
-                    if (create_func) {
-                        return std::unique_ptr<solver::IPowerFlowSolver>(create_func());
-                    }
-                }
-                throw std::runtime_error("GPU iterative current solver backend not available");
+#if GAP_CUDA_AVAILABLE
+                // Directly call the factory function instead of dynamic loading
+                return std::unique_ptr<solver::IPowerFlowSolver>(
+                    solver::create_gpu_ic_powerflow_solver());
+#else
+                throw std::runtime_error("GPU support not compiled");
+#endif
             }
 
             default:

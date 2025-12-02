@@ -487,11 +487,21 @@ class GPUCuDSSSolver : public ILUSolver {
 
 // C-style interface for dynamic loading
 extern "C" {
-gap::solver::ILUSolver* create_gpu_lu_solver() { return new gap::solver::GPUCuDSSSolver(); }
+__attribute__((visibility("default"))) gap::solver::ILUSolver* create_gpu_lu_solver() {
+    return new gap::solver::GPUCuDSSSolver();
+}
 
-void destroy_gpu_lu_solver(gap::solver::ILUSolver* instance) { delete instance; }
+__attribute__((visibility("default"))) void destroy_gpu_lu_solver(
+    gap::solver::ILUSolver* instance) {
+    delete instance;
+}
 
-gap::solver::ILUSolver* create_gpu_ilu_solver() { return new gap::solver::GPUCuDSSSolver(); }
+__attribute__((visibility("default"))) gap::solver::ILUSolver* create_gpu_ilu_solver() {
+    return new gap::solver::GPUCuDSSSolver();
+}
 
-void destroy_gpu_ilu_solver(gap::solver::ILUSolver* instance) { delete instance; }
+__attribute__((visibility("default"))) void destroy_gpu_ilu_solver(
+    gap::solver::ILUSolver* instance) {
+    delete instance;
+}
 }

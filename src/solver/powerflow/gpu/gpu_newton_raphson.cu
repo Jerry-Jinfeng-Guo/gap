@@ -723,9 +723,9 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
 // C-style interface for dynamic loading
 extern "C" {
-gap::solver::IPowerFlowSolver* create_gpu_powerflow_solver() {
+gap::solver::IPowerFlowSolver* create_gpu_nr_powerflow_solver() {
     return new gap::solver::GPUNewtonRaphson();
 }
 
-void destroy_gpu_powerflow_solver(gap::solver::IPowerFlowSolver* instance) { delete instance; }
+void destroy_gpu_nr_powerflow_solver(gap::solver::IPowerFlowSolver* instance) { delete instance; }
 }

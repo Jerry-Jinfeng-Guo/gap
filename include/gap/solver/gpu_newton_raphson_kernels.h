@@ -2,7 +2,7 @@
 
 #include <cuComplex.h>
 
-namespace gap::solver::gpu_kernels {
+namespace gap::solver::nr_kernels {
 
 /**
  * @brief Launch CUDA kernel to calculate current injections I = Y * V
@@ -55,18 +55,4 @@ void launch_calculate_power_injections(cuDoubleComplex const* d_voltages,
                                        cuDoubleComplex const* d_currents, cuDoubleComplex* d_powers,
                                        int num_buses);
 
-// GPU Iterative Current kernels
-void launch_gpu_ic_calculate_current_injections(cuDoubleComplex const* d_voltages,
-                                                cuDoubleComplex const* d_specified_powers,
-                                                cuDoubleComplex* d_currents, int const* d_bus_types,
-                                                int const* d_load_types, double const* d_u_pu,
-                                                int num_buses);
-
-void launch_gpu_ic_check_convergence(cuDoubleComplex const* d_old_voltages,
-                                     cuDoubleComplex const* d_new_voltages, double* d_max_change,
-                                     int num_buses);
-
-void launch_gpu_ic_enforce_slack(cuDoubleComplex* d_voltages, int const* d_bus_types,
-                                 double const* d_u_pu, int num_buses);
-
-}  // namespace gap::solver::gpu_kernels
+}  // namespace gap::solver::nr_kernels

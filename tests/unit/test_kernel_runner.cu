@@ -13,7 +13,7 @@
 #include <iostream>
 
 #ifdef GAP_ENABLE_KERNEL_TESTS
-#include "gap/solver/gpu_powerflow_kernels.h"
+#include "gap/solver/gpu_newton_raphson_kernels.h"
 #endif
 
 int main() {
@@ -46,7 +46,7 @@ int main() {
     std::cout << "CUDA runtime initialized successfully" << std::endl;
     std::cout << std::endl;
 
-    gap::solver::gpu_kernels::kernel_tests::run_all_kernel_tests();
+    gap::solver::nr_kernels::kernel_tests::run_all_kernel_tests();
 
     std::cout << std::endl;
     std::cout << "=== Kernel Tests Complete ===" << std::endl;

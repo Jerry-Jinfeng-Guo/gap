@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "gap/logging/logger.h"
-#include "gap/solver/gpu_powerflow_kernels.h"
+#include "gap/solver/gpu_newton_raphson_kernels.h"
 #include "gap/solver/powerflow_interface.h"
 
 namespace gap::solver {
@@ -428,18 +428,18 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
         // Initialize voltages on GPU
         if (config.use_flat_start) {
             LOG_INFO(logger, "Using flat start initialization");
-            gpu_kernels::launch_initialize_flat_start(gpu_data_.d_voltages, gpu_data_.d_bus_types,
-                                                      d_specified_magnitudes_, num_buses_);
+            nr_kernels::launch_initialize_flat_start(gpu_data_.d_voltages, gpu_data_.d_bus_types,
+                                                     d_specified_magnitudes_, num_buses_);
         } else {
             // TODO: Use previous solution if available
-            gpu_kernels::launch_initialize_flat_start(gpu_data_.d_voltages, gpu_data_.d_bus_types,
-                                                      d_specified_magnitudes_, num_buses_);
+            nr_kernels::launch_initialize_flat_start(gpu_data_.d_voltages, gpu_data_.d_bus_types,
+                                                     d_specified_magnitudes_, num_buses_);
         }
 
         // Newton-Raphson iterations (all on GPU)
         for (int iter = 0; iter < config.max_iterations; ++iter) {
             // Calculate current injections I = Y * V
-            gpu_kernels::launch_calculate_current_injections(
+            nr_kernels::launch_calculate_current_injections(
                 gpu_admittance_.d_row_ptr, gpu_admittance_.d_col_idx, gpu_admittance_.d_values,
                 gpu_data_.d_voltages, d_currents_, num_buses_);
 
@@ -447,7 +447,7 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
             // First zero out the mismatch array (important for sparse writes)
             cudaMemset(gpu_data_.d_mismatches, 0, num_unknowns_ * sizeof(double));
 
-            gpu_kernels::launch_calculate_power_mismatches(
+            nr_kernels::launch_calculate_power_mismatches(
                 gpu_data_.d_voltages, d_currents_, gpu_data_.d_power_injections,
                 gpu_data_.d_bus_types, d_load_types_, gpu_data_.d_mismatches, num_buses_,
                 d_mismatch_indices_);
@@ -507,14 +507,14 @@ class GPUNewtonRaphson : public IPowerFlowSolver {
 
             // Step 4: Build Jacobian matrix on GPU
             // First, calculate power injections S = V * conj(I)
-            gpu_kernels::launch_calculate_power_injections(gpu_data_.d_voltages, d_currents_,
-                                                           d_powers_, num_buses_);
+            nr_kernels::launch_calculate_power_injections(gpu_data_.d_voltages, d_currents_,
+                                                          d_powers_, num_buses_);
 
             // Zero out the Jacobian matrix before building (important for sparse writes)
             cudaMemset(d_jacobian_, 0, num_unknowns_ * num_unknowns_ * sizeof(double));
 
             // Build full Jacobian matrix (dense format for cuDSS)
-            gpu_kernels::launch_build_jacobian_dense(
+            nr_kernels::launch_build_jacobian_dense(
                 gpu_admittance_.d_row_ptr, gpu_admittance_.d_col_idx, gpu_admittance_.d_values,
                 gpu_data_.d_voltages, d_powers_, gpu_data_.d_bus_types,
                 d_angle_var_idx_,  // Correct: angle variable indices

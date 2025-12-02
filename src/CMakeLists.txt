@@ -208,7 +208,8 @@ if(GAP_ENABLE_CUDA)
     add_library(gap_powerflow_gpu SHARED
         solver/powerflow/gpu/gpu_newton_raphson.cu
         solver/powerflow/gpu/gpu_iterative_current.cu
-        solver/powerflow/gpu/gpu_powerflow_kernels.cu
+        solver/powerflow/gpu/gpu_newton_raphson_kernels.cu
+        solver/powerflow/gpu/gpu_iterative_current_kernels.cu
     )
 
     target_include_directories(gap_powerflow_gpu PUBLIC

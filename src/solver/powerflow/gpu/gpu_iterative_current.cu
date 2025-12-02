@@ -9,152 +9,10 @@
 
 #include "gap/core/backend_factory.h"
 #include "gap/logging/logger.h"
+#include "gap/solver/gpu_iterative_current_kernels.h"
 #include "gap/solver/powerflow_interface.h"
 
 namespace gap::solver {
-
-// ============================================================================
-// CUDA Kernels
-// ============================================================================
-
-// Initialize voltages to flat start (1.0 + 0.0j for all buses)
-__global__ void initialize_voltages_flat_kernel(cuDoubleComplex* d_voltages, int num_buses) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < num_buses) {
-        d_voltages[idx] = make_cuDoubleComplex(1.0, 0.0);
-    }
-}
-
-// Copy current voltages to old voltages (for convergence checking)
-__global__ void copy_voltages_kernel(cuDoubleComplex const* __restrict__ src,
-                                     cuDoubleComplex* __restrict__ dst, int num_buses) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < num_buses) {
-        dst[idx] = src[idx];
-    }
-}
-
-// Calculate currents using sparse matrix-vector multiplication: I = Y * V
-// Each thread calculates one row (one bus current)
-__global__ void calculate_currents_kernel(cuDoubleComplex const* __restrict__ ybus_values,
-                                          int const* __restrict__ ybus_col_idx,
-                                          int const* __restrict__ ybus_row_ptr,
-                                          cuDoubleComplex const* __restrict__ voltages,
-                                          cuDoubleComplex* __restrict__ currents, int num_buses) {
-    int row = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (row < num_buses) {
-        // Get the start and end indices for this row in CSR format
-        int row_start = ybus_row_ptr[row];
-        int row_end = ybus_row_ptr[row + 1];
-
-        // Accumulate: I[row] = sum(Y[row,col] * V[col])
-        cuDoubleComplex sum = make_cuDoubleComplex(0.0, 0.0);
-
-        for (int idx = row_start; idx < row_end; ++idx) {
-            int col = ybus_col_idx[idx];
-            cuDoubleComplex y_val = ybus_values[idx];
-            cuDoubleComplex v_val = voltages[col];
-
-            // Complex multiplication: sum += y_val * v_val
-            sum = cuCadd(sum, cuCmul(y_val, v_val));
-        }
-
-        currents[row] = sum;
-    }
-}
-
-// Kernel 5: Update voltages using Iterative Current method
-// V_new = V_old + (I_specified - I_calculated) / Y_diagonal
-__global__ void update_voltages_kernel(cuDoubleComplex const* __restrict__ ybus_values,
-                                       int const* __restrict__ ybus_col_idx,
-                                       int const* __restrict__ ybus_row_ptr,
-                                       cuDoubleComplex const* __restrict__ i_specified,
-                                       cuDoubleComplex const* __restrict__ currents,
-                                       cuDoubleComplex* __restrict__ voltages, int num_buses) {
-    int bus = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (bus < num_buses) {
-        // Find diagonal element of Y-bus for this bus
-        cuDoubleComplex y_diag = make_cuDoubleComplex(1.0, 0.0);  // Default
-
-        int row_start = ybus_row_ptr[bus];
-        int row_end = ybus_row_ptr[bus + 1];
-
-        for (int idx = row_start; idx < row_end; ++idx) {
-            int col = ybus_col_idx[idx];
-            if (col == bus) {
-                y_diag = ybus_values[idx];
-                break;
-            }
-        }
-
-        // Iterative Current formula: V_new = V_old + (I_specified - I_calculated) / Y_diagonal
-        cuDoubleComplex i_spec = i_specified[bus];
-        cuDoubleComplex i_calc = currents[bus];
-        cuDoubleComplex i_mismatch = cuCsub(i_spec, i_calc);
-        cuDoubleComplex delta_v = cuCdiv(i_mismatch, y_diag);
-
-        // Update voltage: V_new = V_old + delta_V
-        voltages[bus] = cuCadd(voltages[bus], delta_v);
-    }
-}
-
-// Kernel 6: Enforce slack bus constraint
-// Set slack bus voltage to fixed reference value (typically 1.0 + 0j)
-__global__ void enforce_slack_bus_kernel(cuDoubleComplex* __restrict__ voltages, int slack_bus_idx,
-                                         cuDoubleComplex slack_voltage) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    // Only first thread needs to do this
-    if (idx == 0) {
-        voltages[slack_bus_idx] = slack_voltage;
-    }
-}
-
-// Calculate max voltage change for convergence checking
-__global__ void calculate_voltage_change_kernel(cuDoubleComplex const* __restrict__ old_voltages,
-                                                cuDoubleComplex const* __restrict__ new_voltages,
-                                                double* __restrict__ max_change, int num_buses) {
-    // Shared memory for block-level reduction
-    __shared__ double shared_max[256];
-
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int tid = threadIdx.x;
-
-    // Each thread calculates its voltage magnitude change
-    double local_max = 0.0;
-    if (idx < num_buses) {
-        double old_mag = cuCabs(old_voltages[idx]);
-        double new_mag = cuCabs(new_voltages[idx]);
-        local_max = fabs(new_mag - old_mag);
-    }
-
-    // Store in shared memory
-    shared_max[tid] = local_max;
-    __syncthreads();
-
-    // Block-level reduction to find max
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            shared_max[tid] = fmax(shared_max[tid], shared_max[tid + s]);
-        }
-        __syncthreads();
-    }
-
-    // First thread writes block result
-    if (tid == 0) {
-        atomicMax((unsigned long long*)max_change, __double_as_longlong(shared_max[0]));
-    }
-}
-
-// Simple test kernel to verify CUDA kernel launches work
-__global__ void test_kernel(double* d_data, int n) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < n) {
-        d_data[idx] = d_data[idx] * 2.0;  // Simple operation
-    }
-}
 
 // ============================================================================
 // GPU Iterative Current Solver Implementation
@@ -216,18 +74,8 @@ class GPUIterativeCurrent : public IPowerFlowSolver {
         std::vector<double> h_data = {1.0, 2.0, 3.0, 4.0};
         cudaMemcpy(d_data, h_data.data(), n * sizeof(double), cudaMemcpyHostToDevice);
 
-        int blockSize = 256;
-        int numBlocks = (n + blockSize - 1) / blockSize;
-        test_kernel<<<numBlocks, blockSize>>>(d_data, n);
+        ic_kernels::launch_test_kernel(d_data, n);
 
-        err = cudaGetLastError();
-        if (err != cudaSuccess) {
-            cudaFree(d_data);
-            throw std::runtime_error("Kernel launch failed: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
-
-        cudaDeviceSynchronize();
         cudaFree(d_data);
 
         LOG_DEBUG(logger, "Kernel launch capability verified");
@@ -421,22 +269,7 @@ class GPUIterativeCurrent : public IPowerFlowSolver {
 
         LOG_DEBUG(logger, "Initializing voltages to flat start on GPU");
 
-        int blockSize = 256;
-        int numBlocks = (num_buses_ + blockSize - 1) / blockSize;
-
-        initialize_voltages_flat_kernel<<<numBlocks, blockSize>>>(d_voltages_, num_buses_);
-
-        cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to launch initialize_voltages_flat_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
-
-        err = cudaDeviceSynchronize();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to synchronize initialize_voltages_flat_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
+        ic_kernels::launch_initialize_voltages_flat(d_voltages_, num_buses_);
 
         LOG_DEBUG(logger, "Voltages initialized on GPU");
     }
@@ -446,23 +279,7 @@ class GPUIterativeCurrent : public IPowerFlowSolver {
             throw std::runtime_error("GPU memory not allocated");
         }
 
-        int blockSize = 256;
-        int numBlocks = (num_buses_ + blockSize - 1) / blockSize;
-
-        // Copy d_voltages_ to d_old_voltages_
-        copy_voltages_kernel<<<numBlocks, blockSize>>>(d_voltages_, d_old_voltages_, num_buses_);
-
-        cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to launch copy_voltages_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
-
-        err = cudaDeviceSynchronize();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to synchronize copy_voltages_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
+        ic_kernels::launch_copy_voltages(d_voltages_, d_old_voltages_, num_buses_);
     }
 
     double check_convergence() {
@@ -470,32 +287,16 @@ class GPUIterativeCurrent : public IPowerFlowSolver {
             throw std::runtime_error("GPU memory not allocated");
         }
 
-        int blockSize = 256;
-        int numBlocks = (num_buses_ + blockSize - 1) / blockSize;
-
         // Zero out max_change on device
         cudaMemset(d_max_change_, 0, sizeof(double));
 
-        // Launch kernel with shared memory
-        int sharedMemSize = blockSize * sizeof(double);
-        calculate_voltage_change_kernel<<<numBlocks, blockSize, sharedMemSize>>>(
-            d_voltages_, d_old_voltages_, d_max_change_, num_buses_);
-
-        cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to launch calculate_voltage_change_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
-
-        err = cudaDeviceSynchronize();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to synchronize calculate_voltage_change_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
+        ic_kernels::launch_calculate_voltage_change(d_voltages_, d_old_voltages_, d_max_change_,
+                                                    num_buses_);
 
         // Copy result back to host
         double max_change = 0.0;
-        err = cudaMemcpy(&max_change, d_max_change_, sizeof(double), cudaMemcpyDeviceToHost);
+        cudaError_t err =
+            cudaMemcpy(&max_change, d_max_change_, sizeof(double), cudaMemcpyDeviceToHost);
         if (err != cudaSuccess) {
             throw std::runtime_error("Failed to copy max_change to host: " +
                                      std::string(cudaGetErrorString(err)));
@@ -509,24 +310,8 @@ class GPUIterativeCurrent : public IPowerFlowSolver {
             throw std::runtime_error("GPU memory or Y-bus not allocated");
         }
 
-        int blockSize = 256;
-        int numBlocks = (num_buses_ + blockSize - 1) / blockSize;
-
-        // Launch kernel: I = Y * V
-        calculate_currents_kernel<<<numBlocks, blockSize>>>(
-            d_ybus_values_, d_ybus_col_idx_, d_ybus_row_ptr_, d_voltages_, d_currents_, num_buses_);
-
-        cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to launch calculate_currents_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
-
-        err = cudaDeviceSynchronize();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to synchronize calculate_currents_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
+        ic_kernels::launch_calculate_currents(d_ybus_values_, d_ybus_col_idx_, d_ybus_row_ptr_,
+                                              d_voltages_, d_currents_, num_buses_);
     }
 
     void update_voltages() {
@@ -534,25 +319,8 @@ class GPUIterativeCurrent : public IPowerFlowSolver {
             throw std::runtime_error("GPU memory or Y-bus not allocated");
         }
 
-        int blockSize = 256;
-        int numBlocks = (num_buses_ + blockSize - 1) / blockSize;
-
-        // Launch kernel: V_new = V_old + (I_specified - I_calculated) / Y_diagonal
-        update_voltages_kernel<<<numBlocks, blockSize>>>(d_ybus_values_, d_ybus_col_idx_,
-                                                         d_ybus_row_ptr_, d_i_specified_,
-                                                         d_currents_, d_voltages_, num_buses_);
-
-        cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to launch update_voltages_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
-
-        err = cudaDeviceSynchronize();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to synchronize update_voltages_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
+        ic_kernels::launch_update_voltages(d_ybus_values_, d_ybus_col_idx_, d_ybus_row_ptr_,
+                                           d_i_specified_, d_currents_, d_voltages_, num_buses_);
     }
 
     void enforce_slack_bus() {
@@ -563,20 +331,7 @@ class GPUIterativeCurrent : public IPowerFlowSolver {
         // Set slack bus to reference voltage (1.0 + 0j)
         cuDoubleComplex slack_voltage = make_cuDoubleComplex(1.0, 0.0);
 
-        // Only need 1 thread for this simple operation
-        enforce_slack_bus_kernel<<<1, 1>>>(d_voltages_, slack_bus_idx_, slack_voltage);
-
-        cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to launch enforce_slack_bus_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
-
-        err = cudaDeviceSynchronize();
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to synchronize enforce_slack_bus_kernel: " +
-                                     std::string(cudaGetErrorString(err)));
-        }
+        ic_kernels::launch_enforce_slack_bus(d_voltages_, slack_bus_idx_, slack_voltage);
     }
 
     void setup_specified_currents(NetworkData const& network_data, PowerFlowConfig const& config) {

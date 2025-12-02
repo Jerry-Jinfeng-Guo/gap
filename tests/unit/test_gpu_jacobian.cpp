@@ -6,7 +6,7 @@
 #include <iostream>
 
 #include "gap/core/backend_factory.h"
-#include "gap/solver/gpu_powerflow_kernels.h"
+#include "gap/solver/gpu_newton_raphson_kernels.h"
 
 #include "test_framework.h"
 
@@ -108,16 +108,16 @@ void test_gpu_jacobian_2bus_simple() {
                cudaMemcpyHostToDevice);
 
     // Calculate currents: I = Y * V
-    gpu_kernels::launch_calculate_current_injections(d_row_ptr, d_col_idx, d_y_values, d_voltages,
-                                                     d_currents, num_buses);
+    nr_kernels::launch_calculate_current_injections(d_row_ptr, d_col_idx, d_y_values, d_voltages,
+                                                    d_currents, num_buses);
 
     // Calculate powers: S = V * conj(I)
-    gpu_kernels::launch_calculate_power_injections(d_voltages, d_currents, d_powers, num_buses);
+    nr_kernels::launch_calculate_power_injections(d_voltages, d_currents, d_powers, num_buses);
 
     // Build Jacobian matrix
-    gpu_kernels::launch_build_jacobian_dense(d_row_ptr, d_col_idx, d_y_values, d_voltages, d_powers,
-                                             d_bus_types, d_angle_var_idx, d_mag_var_idx,
-                                             d_jacobian, num_buses, num_unknowns);
+    nr_kernels::launch_build_jacobian_dense(d_row_ptr, d_col_idx, d_y_values, d_voltages, d_powers,
+                                            d_bus_types, d_angle_var_idx, d_mag_var_idx, d_jacobian,
+                                            num_buses, num_unknowns);
 
     // Copy results back
     std::vector<double> h_jacobian(num_unknowns * num_unknowns);

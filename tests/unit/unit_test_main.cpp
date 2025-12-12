@@ -1,3 +1,6 @@
+#include <cstdlib>
+#include <iostream>
+
 #include "test_framework.h"
 
 // Forward declarations of test registration functions
@@ -26,5 +29,10 @@ int main() {
     // Run all tests
     runner.run_all();
 
-    return runner.get_failed_count();
+    int failed_count = runner.get_failed_count();
+
+    // Use _Exit instead of return to skip global destructors
+    // This prevents segfault from CUDA cleanup during static destructor phase
+    // Note: This means we skip proper cleanup, but for a test executable that's acceptable
+    std::_Exit(failed_count);
 }

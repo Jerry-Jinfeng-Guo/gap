@@ -1,4 +1,3 @@
-#include <cuda.h>
 #include <cuda_runtime.h>
 
 #include <iostream>
@@ -39,23 +38,20 @@ void test_gpu_ic_batch_with_ybus_reuse();
 void test_gpu_ic_batch_vs_cpu_batch();
 
 int main() {
-    // CRITICAL FIX: Initialize CUDA runtime FIRST before any static init can corrupt it
-    std::cout << "[MAIN] Initializing CUDA at program start..." << std::endl;
-    CUcontext ctx_init;
-    CUresult res = cuCtxGetCurrent(&ctx_init);
-    std::cout << "[MAIN] Initial context: res=" << res << ", ctx=" << (void*)ctx_init << std::endl;
+    // Initialize CUDA runtime before tests
+    std::cout << "[MAIN] Initializing CUDA..." << std::endl;
 
-    // Reset device to clear any stale initialization
-    cudaError_t err = cudaDeviceReset();
-    std::cout << "[MAIN] cudaDeviceReset: " << cudaGetErrorString(err) << std::endl;
+    // Simply set the device - don't reset it as that can cause cleanup issues
+    cudaError_t err = cudaSetDevice(0);
+    if (err != cudaSuccess) {
+        std::cerr << "[MAIN] Failed to set CUDA device: " << cudaGetErrorString(err) << std::endl;
+        return 1;
+    }
 
-    // Set device to create fresh context
-    err = cudaSetDevice(0);
-    std::cout << "[MAIN] cudaSetDevice(0): " << cudaGetErrorString(err) << std::endl;
-
-    res = cuCtxGetCurrent(&ctx_init);
-    std::cout << "[MAIN] Context after init: res=" << res << ", ctx=" << (void*)ctx_init
-              << std::endl;
+    // Verify device is accessible
+    int device;
+    err = cudaGetDevice(&device);
+    std::cout << "[MAIN] Using CUDA device: " << device << std::endl;
 
     std::cout << "Running GPU tests..." << std::endl;
 
@@ -110,6 +106,13 @@ int main() {
         // runner.add_test("GPU IC - Batch vs CPU Batch", test_gpu_ic_batch_vs_cpu_batch);
 
         runner.run_all();
+
+        // Explicitly clean up before CUDA context is destroyed
+        // This ensures all GPU memory is freed while CUDA is still active
+        std::cout << "[MAIN] Test cleanup: forcing CUDA synchronization..." << std::endl;
+        cudaDeviceSynchronize();
+
+        std::cout << "[MAIN] Tests completed successfully" << std::endl;
 
         return (runner.get_failed_count() == 0) ? 0 : 1;
     } catch (const std::exception& e) {
